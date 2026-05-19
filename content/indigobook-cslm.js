@@ -1335,7 +1335,8 @@ ${mlzBlock}` : mlzBlock;
         if (itemTypeName !== "case") return;
         const reporter = String(item.getField?.("reporter") || "").trim();
         const rawCourt = String(item.getField?.("court") || "").trim();
-        const parsedCourt = this.caseCourtMapper?.mapCaseCourt?.(rawCourt) || null;
+        const hasCourtKeyAlready = this._looksLikeCourtKey(rawCourt);
+        const parsedCourt = hasCourtKeyAlready ? null : this.caseCourtMapper?.mapCaseCourt?.(rawCourt) || null;
         const mappedCourt = this.abbrevService.normalizeKey(parsedCourt?.courtKey || "");
         const mappedJurisdiction = String(parsedCourt?.jurisdiction || "").trim().toLowerCase();
         const court = this.abbrevService.normalizeKey(rawCourt || "");
@@ -1353,7 +1354,6 @@ ${mlzBlock}` : mlzBlock;
         }
         let nextExtra = extra;
         let changed = false;
-        const hasCourtKeyAlready = this._looksLikeCourtKey(rawCourt);
         const targetCourt = mappedCourt || upgradedCourt;
         if (targetCourt && (!hasCourtKeyAlready || court !== targetCourt)) {
           item.setField("court", targetCourt);
