@@ -62,8 +62,8 @@ var IndigoBookCSLM = (() => {
   var Jurisdiction = class {
     static fromItem(item) {
       const extra = (item.getField?.("extra") || item.extra || "") + "";
-      let jur = this._fromMLZ(extra) || this._fromKeyValue(extra);
-      if (!jur) jur = "us";
+      const jur = this._fromMLZ(extra) || this._fromKeyValue(extra);
+      if (!jur) return "";
       return this._normalizeJurisdiction(jur);
     }
     static getMLZExtraFields(itemOrExtra) {
@@ -222,7 +222,7 @@ ${mlzBlock}` : mlzBlock;
     }
     static _normalizeJurisdiction(jur) {
       let value = (jur || "").toString().trim().toLowerCase();
-      if (!value) return "us";
+      if (!value) return "";
       const stateInfoByName = {
         alabama: { code: "al", circuit: "11" },
         alaska: { code: "ak", circuit: "9" },
@@ -283,7 +283,6 @@ ${mlzBlock}` : mlzBlock;
         northernmarianaislands: { code: "mp", circuit: "9" }
       };
       if (/^us(?::[a-z0-9._-]+)*$/.test(value)) return value;
-      if (/^[a-z]{2}$/.test(value)) return `us:${value}`;
       const districtMatch = value.match(/^([nsewmc])?\s*\.?\s*d\.?\s+(.+)$/i);
       if (districtMatch) {
         const districtPart = districtMatch[1] ? `${String(districtMatch[1]).toLowerCase()}d` : "d";
@@ -332,6 +331,18 @@ ${mlzBlock}` : mlzBlock;
       if (stateInfoByName[compactAlpha]?.code) return `us:${stateInfoByName[compactAlpha].code}`;
       if (byName[compactAlpha]) return byName[compactAlpha];
       return value;
+    }
+    static isRecognizedJurisdiction(jur) {
+      const normalized = this._normalizeJurisdiction(jur || "");
+      if (!normalized) return false;
+      if (/^us(?::[a-z0-9._-]+)*$/.test(normalized)) return true;
+      const compact = normalized.replace(/[^a-z0-9]/g, "");
+      const knownRoots = /* @__PURE__ */ new Set([
+        "au",
+        "ca",
+        "uk"
+      ]);
+      return knownRoots.has(compact);
     }
     static trimChain(jur) {
       const parts = (jur || "us").toLowerCase().split(":");
@@ -1361,6 +1372,7 @@ ${mlzBlock}` : mlzBlock;
         }
         const effectiveCourt = targetCourt || court;
         const effectiveJurisdiction = inferredJurisdiction;
+        const canRewriteJurisdiction = !mlzJurisdiction || /^us(?::|$)/.test(mlzJurisdiction);
         if (reporter && reporter !== mlzReporter) {
           nextExtra = this.Jurisdiction.updateMLZExtraField?.(nextExtra, "reporter", reporter) || nextExtra;
         }
@@ -1368,7 +1380,7 @@ ${mlzBlock}` : mlzBlock;
           item.setField("reporter", mlzReporter);
           changed = true;
         }
-        if (effectiveJurisdiction && effectiveJurisdiction !== mlzJurisdiction) {
+        if (canRewriteJurisdiction && effectiveJurisdiction && effectiveJurisdiction !== mlzJurisdiction) {
           const displayJurisdiction = this.abbrevService.formatJurisdictionDisplay(effectiveJurisdiction);
           nextExtra = this.Jurisdiction.updateMLZJurisdiction?.(nextExtra, effectiveJurisdiction, displayJurisdiction) || nextExtra;
         }
