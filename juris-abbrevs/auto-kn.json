@@ -1,0 +1,12 @@
+{
+  "filename": "auto-kn.json",
+  "name": "Saint Kitts and Nevis",
+  "version": "2020-09-07 21:01:30 UTC",
+  "xdata": {
+    "default": {
+      "place": {
+        "KN": "Saint Kitts and Nevis"
+      }
+    }
+  }
+}

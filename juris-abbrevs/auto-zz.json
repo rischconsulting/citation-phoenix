@@ -1,0 +1,36 @@
+{
+  "filename": "auto-zz.json",
+  "name": "Laputa",
+  "version": "2021-01-27 04:48:22 UTC",
+  "xdata": {
+    "default": {
+      "place": {
+        "ZZ": "Lap.",
+        "ZZ:ATL": "Atl."
+      }
+    },
+    "zz": {
+      "institution-part": {
+        "sc": "Sup. Ct."
+      },
+      "institution-entire": {
+        "sc": "SC"
+      },
+      "container-title": {
+        "Laputa Reports": "!authority>>>Lap. Rep."
+      }
+    },
+    "zz:atl": {
+      "institution-part": {
+        "ca": "Atl. Ct. App."
+      },
+      "institution-entire": {
+        "ca": "ATLCA"
+      },
+      "container-title": {
+        "Atlantis Decisions": "!authority:Atl.>>>Atl. Dec.",
+        "Poseidon Service": "#1>>>Poseidon Serv."
+      }
+    }
+  }
+}

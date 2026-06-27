@@ -1,0 +1,12 @@
+{
+  "filename": "auto-cf.json",
+  "name": "Central African Republic",
+  "version": "2020-09-07 21:01:30 UTC",
+  "xdata": {
+    "default": {
+      "place": {
+        "CF": "Central African Republic"
+      }
+    }
+  }
+}

@@ -1,4 +1,4 @@
-# IndigoBook-Phoenix (Zotero 8, 9) - v0.6.0
+# IndigoBook-Phoenix (Zotero 8, 9) - v0.7.0
 
 This plugin bundles US IndigoTemp jurisdiction modules and uses dynamic module loading via
 `sys.loadJurisdictionStyle(jurisdiction, variantName)` so multiple US jurisdictions can appear in one document.
@@ -154,18 +154,31 @@ Optional custom output base name:
 
 ### Refresh Jurisdiction Assets
 
-Use this when you want to normalize or refresh the Juris-M-style dataset folders:
+Use this when you want to import or refresh the Juris-M-style asset folders from a Juris-M checkout:
 
 ```powershell
 ./scripts/sync-juris-assets.ps1
 ```
 
-The script copies the canonical jurisdiction datasets into:
+By default the script looks for a sibling `jurism-zotero` checkout, initializes its submodules if needed, and copies
+the canonical asset folders into:
 
+- `style-modules/`
 - `juris-abbrevs/`
 - `juris-maps/`
 
-It accepts a `-SourceRoot` argument if you want to mirror the files from another checkout.
+It accepts `-SourceRoot` and `-DestinationRoot` arguments if you want to mirror the files from another checkout or
+into another workspace.
+
+To update the local Juris-M source checkout itself, run a Git fetch or pull inside `jurism-zotero/`, for example:
+
+```powershell
+git -C .\jurism-zotero fetch --all --prune
+git -C .\jurism-zotero pull --ff-only
+```
+
+If you want to move the checkout to a specific upstream branch or tag, use `git checkout` in that folder first, then
+re-run the import script.
 
 ### PowerShell Execution Policy Note
 

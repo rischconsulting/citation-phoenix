@@ -1,0 +1,12 @@
+{
+  "filename": "auto-gy.json",
+  "name": "Guyana",
+  "version": "2020-09-07 21:01:30 UTC",
+  "xdata": {
+    "default": {
+      "place": {
+        "GY": "Guyana"
+      }
+    }
+  }
+}

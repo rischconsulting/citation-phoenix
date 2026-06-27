@@ -1,0 +1,12 @@
+{
+  "filename": "auto-la.json",
+  "name": "Lao People's Democratic Republic",
+  "version": "2020-09-07 21:01:30 UTC",
+  "xdata": {
+    "default": {
+      "place": {
+        "LA": "Lao People's Democratic Republic"
+      }
+    }
+  }
+}

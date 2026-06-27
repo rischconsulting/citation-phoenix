@@ -1,0 +1,12 @@
+{
+  "filename": "auto-va.json",
+  "name": "Vatican City",
+  "version": "2020-09-07 21:01:30 UTC",
+  "xdata": {
+    "default": {
+      "place": {
+        "VA": "Vatican City"
+      }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "filename": "auto-dd.json",
+  "name": "German Democratic Republic",
+  "version": "2020-09-07 21:01:30 UTC",
+  "xdata": {
+    "default": {
+      "place": {
+        "DD": "German Democratic Republic"
+      }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "filename": "auto-gd.json",
+  "name": "Grenada",
+  "version": "2020-09-07 21:01:30 UTC",
+  "xdata": {
+    "default": {
+      "place": {
+        "GD": "Grenada"
+      }
+    }
+  }
+}
