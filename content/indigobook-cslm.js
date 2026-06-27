@@ -32,13 +32,10 @@ var IndigoBookCSLM = (() => {
     }
     async init() {
       await Promise.all([
-        this.loadJSONAny(["juris-abbrevs/auto-us.json", "data/auto-us.json"]),
-        this.loadJSONAny(["juris-maps/juris-us-map.json", "data/juris-us-map.json"]),
-        this.loadJSONAny(["juris-maps/primary-jurisdictions.json", "data/primary-jurisdictions.json"]),
-        this.loadJSONAny(["juris-abbrevs/primary-us.json", "data/primary-us.json"]),
-        this.loadJSONAny(["juris-abbrevs/secondary-us-bluebook.json", "data/secondary-us-bluebook.json"]),
-        this.loadJSONAny(["juris-abbrevs/secondary-science.json", "data/secondary-science.json"]),
-        this.loadJSON("style-modules/index.json").catch(() => null)
+        this.loadJSON("style-modules/index.json").catch(() => null),
+        this.loadJSON("juris-abbrevs/DIRECTORY_LISTING.json").catch(() => null),
+        this.loadJSON("juris-maps/versions.json").catch(() => null),
+        this.loadJSON("juris-maps/primary-jurisdictions.json").catch(() => null)
       ]);
     }
     async loadText(relPath) {
@@ -382,18 +379,94 @@ ${mlzBlock}` : mlzBlock;
     }
   };
 
+  // lib/services/locale.mjs
+  function getLocaleCandidates(rawLocale) {
+    const locale = String(rawLocale || "").trim().replace(/_/g, "-");
+    if (!locale) {
+      return ["us"];
+    }
+    const parts = locale.split("-").filter(Boolean);
+    const candidates = [];
+    const push = (value) => {
+      const code = String(value || "").trim().toLowerCase();
+      if (code && !candidates.includes(code)) {
+        candidates.push(code);
+      }
+    };
+    push(parts.join("-"));
+    if (parts.length >= 2) {
+      push(`${parts[1]}-${parts[0]}`);
+    }
+    for (let index = 1; index < parts.length; index += 1) {
+      const part = parts[index];
+      if (/^[A-Za-z]{2}$/.test(part) || /^\d{3}$/.test(part)) {
+        push(part);
+        break;
+      }
+    }
+    push(parts[0]);
+    push("us");
+    return candidates;
+  }
+  function filePrefixMatches(fileName, prefix) {
+    const file = String(fileName || "").toLowerCase();
+    const stem = String(prefix || "").toLowerCase();
+    const fileStem = file.replace(/\.[^.]+$/, "");
+    return fileStem === stem || fileStem.startsWith(`${stem}-`) || fileStem.startsWith(`${stem}+`);
+  }
+  function selectLocaleFiles(fileNames, prefix, rawLocale, extension) {
+    const files = Array.isArray(fileNames) ? fileNames.slice() : [];
+    const normalizedExtension = String(extension || "").trim().toLowerCase();
+    const candidates = getLocaleCandidates(rawLocale);
+    const matchingFiles = (candidate) => {
+      const lowerCandidate = String(candidate || "").trim().toLowerCase();
+      const exactName = normalizedExtension ? `${prefix}-${lowerCandidate}${normalizedExtension}` : `${prefix}-${lowerCandidate}`;
+      const exact = [];
+      const variants = [];
+      for (const file of files) {
+        const lower = String(file || "").toLowerCase();
+        if (normalizedExtension && !lower.endsWith(normalizedExtension)) continue;
+        if (!filePrefixMatches(lower, `${prefix}-${lowerCandidate}`)) continue;
+        if (lower === exactName) {
+          exact.push(file);
+        } else {
+          variants.push(file);
+        }
+      }
+      exact.sort((a, b) => a.localeCompare(b));
+      variants.sort((a, b) => a.localeCompare(b));
+      return exact.concat(variants);
+    };
+    for (const candidate of candidates) {
+      const matches = matchingFiles(candidate);
+      if (matches.length) {
+        return matches;
+      }
+    }
+    return [];
+  }
+
   // lib/services/moduleLoader.mjs
   var ModuleLoader = class {
-    constructor({ rootURI, dataStore }) {
+    constructor({ rootURI, dataStore, locale }) {
       this.rootURI = rootURI;
       this.dataStore = dataStore;
+      this.locale = locale;
+      this._defaultJurisdiction = "us";
       this._availableFiles = [];
       this._byFile = /* @__PURE__ */ new Map();
       this._byJur = /* @__PURE__ */ new Map();
     }
     async preload() {
       const idx = await this.dataStore.loadJSON("style-modules/index.json");
-      this._availableFiles = idx?.files || [];
+      const allFiles = Array.isArray(idx?.files) ? idx.files : [];
+      this._availableFiles = selectLocaleFiles(allFiles, "juris", this.locale, ".csl");
+      if (!this._availableFiles.length) {
+        this._availableFiles = allFiles.filter((file) => /\.csl$/i.test(file) && file.toLowerCase().startsWith("juris-")).sort((a, b) => a.localeCompare(b));
+      }
+      if (!this._availableFiles.length) {
+        this._availableFiles = allFiles.filter((file) => /\.csl$/i.test(file)).sort((a, b) => a.localeCompare(b));
+      }
       for (const file of this._availableFiles) {
         const path = "style-modules/" + file;
         const xml = await this.dataStore.loadText(path);
@@ -401,16 +474,25 @@ ${mlzBlock}` : mlzBlock;
         const jur = this._jurFromFilename(file);
         if (jur) this._byJur.set(jur, xml);
       }
-      if (!this._byJur.has("us")) {
-        const baseFile = this._availableFiles.find((f) => f === "juris-us-IndigoTemp.csl");
-        if (baseFile) this._byJur.set("us", this._byFile.get(baseFile));
+      this._defaultJurisdiction = this._availableFiles.length ? (this._jurFromFilename(this._availableFiles[0]) || this._defaultJurisdiction).split(":")[0] || this._defaultJurisdiction : this._defaultJurisdiction;
+      if (!this._byJur.has(this._defaultJurisdiction)) {
+        const baseFile = this._availableFiles.find((f) => {
+          const jur = this._jurFromFilename(f);
+          if (!jur) return false;
+          return jur.split(":")[0] === this._defaultJurisdiction && !jur.includes(":");
+        }) || this._availableFiles.find((f) => {
+          const jur = this._jurFromFilename(f);
+          return jur && jur.split(":")[0] === this._defaultJurisdiction;
+        });
+        if (baseFile) this._byJur.set(this._defaultJurisdiction, this._byFile.get(baseFile));
       }
     }
     _jurFromFilename(file) {
-      const m = file.match(/^juris-us\+(.+)-IndigoTemp\.csl$/);
-      if (m) return "us:" + m[1];
-      if (file === "juris-us-IndigoTemp.csl") return "us";
-      return null;
+      const stem = String(file || "").replace(/\.csl$/i, "");
+      if (!stem.toLowerCase().startsWith("juris-")) return null;
+      const jurisdiction = stem.slice(6).split("-")[0];
+      if (!jurisdiction) return null;
+      return jurisdiction.toLowerCase().replace(/\+/g, ":");
     }
     hasJurisdiction(jur) {
       return this._byJur.has((jur || "").toLowerCase());
@@ -418,42 +500,232 @@ ${mlzBlock}` : mlzBlock;
     loadJurisdictionStyleSync(jurisdiction, variantName = "IndigoTemp") {
       const variant = variantName || "IndigoTemp";
       if (variant !== "IndigoTemp") return null;
-      let jur = (jurisdiction || "us").toLowerCase();
-      if (Jurisdiction.isCircuit(jur)) return this._byJur.get("us") || null;
+      let jur = (jurisdiction || this._defaultJurisdiction || "us").toLowerCase();
+      if (Jurisdiction.isCircuit(jur)) return this._byJur.get(this._defaultJurisdiction) || null;
       for (const j of Jurisdiction.trimChain(jur)) {
         if (this._byJur.has(j)) return this._byJur.get(j);
       }
-      return this._byJur.get("us") || null;
+      return this._byJur.get(this._defaultJurisdiction) || null;
     }
   };
 
   // lib/services/abbrevService.mjs
   var AbbrevService = class {
-    constructor({ dataStore }) {
+    constructor({ dataStore, locale }) {
       this.dataStore = dataStore;
+      this.locale = locale;
+      this._localeCandidates = getLocaleCandidates(locale);
+      this._autoDatasets = /* @__PURE__ */ new Map();
+      this._autoDatasetsByRoot = /* @__PURE__ */ new Map();
+      this._primaryDatasets = /* @__PURE__ */ new Map();
+      this._primaryDatasetsByRoot = /* @__PURE__ */ new Map();
+      this._mapDatasets = /* @__PURE__ */ new Map();
+      this._mapDatasetsByRoot = /* @__PURE__ */ new Map();
+      this._defaultAutoDataset = null;
+      this._defaultPrimaryDataset = null;
+      this._defaultMapDataset = null;
       this._autoUS = null;
       this._primaryUS = null;
       this._secondaryDatasets = {};
-      this._secondaryDatasetOrder = ["secondary-us-bluebook", "secondary-science"];
+      this._secondaryDatasetOrder = [];
+      this._secondaryDatasetMeta = /* @__PURE__ */ new Map();
       this._defaultSecondaryDataset = "secondary-us-bluebook";
       this._jurisUSMap = null;
       this._primaryJur = null;
+      this._defaultJurisdiction = "us";
       this._userSecondaryOverrides = {};
       this._secondaryOverridesPref = "extensions.indigobook-cslm.secondaryContainerTitleOverrides";
       this._userJurisdictionOverrides = {};
       this._jurisdictionOverridesPref = "extensions.indigobook-cslm.jurisdictionOverrides";
     }
     async preload() {
-      this._autoUS = await this.dataStore.loadJSONAny(["juris-abbrevs/auto-us.json", "data/auto-us.json"]);
-      this._primaryUS = await this.dataStore.loadJSONAny(["juris-abbrevs/primary-us.json", "data/primary-us.json"]);
-      this._secondaryDatasets = {
-        "secondary-us-bluebook": await this.dataStore.loadJSONAny(["juris-abbrevs/secondary-us-bluebook.json", "data/secondary-us-bluebook.json"]),
-        "secondary-science": await this.dataStore.loadJSONAny(["juris-abbrevs/secondary-science.json", "data/secondary-science.json"])
-      };
-      this._jurisUSMap = await this.dataStore.loadJSONAny(["juris-maps/juris-us-map.json", "data/juris-us-map.json"]);
+      const listing = await this.dataStore.loadJSON("juris-abbrevs/DIRECTORY_LISTING.json");
+      const listingEntries = Array.isArray(listing) ? listing : [];
+      const fileNames = listingEntries.map((item) => String(item?.filename || "").trim()).filter(Boolean);
+      const fileMetaByName = new Map(
+        listingEntries.map((item) => [String(item?.filename || "").trim(), String(item?.name || "").trim()]).filter(([filename]) => Boolean(filename))
+      );
+      const autoFiles = fileNames.filter((file) => /^auto-.*\.json$/i.test(file));
+      this._autoDatasets = await this._loadDatasetGroup("juris-abbrevs", autoFiles);
+      this._autoDatasetsByRoot = this._groupDatasetsByRoot(this._autoDatasets);
+      this._defaultAutoDataset = this._pickLocaleDataset(Array.from(this._autoDatasets.keys()), "auto") || null;
+      this._autoUS = this._defaultAutoDataset ? this._autoDatasets.get(this._defaultAutoDataset)?.data || null : null;
+      this._defaultJurisdiction = this._jurisdictionRootFromFilename(this._defaultAutoDataset) || this._defaultJurisdiction;
+      const primaryFiles = fileNames.filter((file) => /^primary-.*\.json$/i.test(file));
+      this._primaryDatasets = await this._loadDatasetGroup("juris-abbrevs", primaryFiles);
+      this._primaryDatasetsByRoot = this._groupDatasetsByRoot(this._primaryDatasets);
+      this._defaultPrimaryDataset = this._primaryDatasets.has("primary-us") ? "primary-us" : Array.from(this._primaryDatasets.keys())[0] || null;
+      this._primaryUS = this._defaultPrimaryDataset ? this._primaryDatasets.get(this._defaultPrimaryDataset)?.data || null : null;
+      const mapFiles = fileNames.filter((file) => /^juris-.*-map\.json$/i.test(file));
+      this._mapDatasets = await this._loadDatasetGroup("juris-maps", mapFiles);
+      this._mapDatasetsByRoot = this._groupDatasetsByRoot(this._mapDatasets);
+      this._defaultMapDataset = this._mapDatasets.has("juris-us-map") ? "juris-us-map" : Array.from(this._mapDatasets.keys())[0] || null;
+      this._jurisUSMap = this._defaultMapDataset ? this._mapDatasets.get(this._defaultMapDataset)?.data || null : null;
+      const secondaryFiles = fileNames.filter((file) => /^secondary-.*\.json$/i.test(file));
+      this._secondaryDatasetMeta = new Map(
+        secondaryFiles.map((file) => {
+          const dataset = this._datasetNameFromFilename(file);
+          return [dataset, {
+            filename: file,
+            name: fileMetaByName.get(file) || dataset
+          }];
+        })
+      );
+      this._secondaryDatasets = {};
+      for (const file of secondaryFiles) {
+        const dataset = this._datasetNameFromFilename(file);
+        this._secondaryDatasets[dataset] = await this.dataStore.loadJSON(`juris-abbrevs/${file}`);
+      }
+      this._secondaryDatasetOrder = this._buildSecondaryDatasetOrder(Object.keys(this._secondaryDatasets));
+      this._defaultSecondaryDataset = this._secondaryDatasetOrder.find((dataset) => this._secondaryDatasets?.[dataset]) || this._secondaryDatasetOrder[0] || "secondary-us-bluebook";
       this._primaryJur = await this.dataStore.loadJSONAny(["juris-maps/primary-jurisdictions.json", "data/primary-jurisdictions.json"]);
       this._userSecondaryOverrides = this._loadSecondaryOverrides();
       this._userJurisdictionOverrides = this._loadJurisdictionOverrides();
+    }
+    _buildLocalePathCandidates(basePath, suffix) {
+      const candidates = [];
+      const seen = /* @__PURE__ */ new Set();
+      for (const candidate of this._localeCandidates) {
+        const path = `${basePath}-${candidate}${suffix}`;
+        if (seen.has(path)) continue;
+        seen.add(path);
+        candidates.push(path);
+      }
+      return candidates;
+    }
+    async _loadDatasetGroup(rootDir, fileNames) {
+      const datasets = /* @__PURE__ */ new Map();
+      const files = Array.isArray(fileNames) ? fileNames.slice().sort((a, b) => a.localeCompare(b)) : [];
+      for (const file of files) {
+        const dataset = this._datasetNameFromFilename(file);
+        const data = await this.dataStore.loadJSON(`${rootDir}/${file}`);
+        datasets.set(dataset, {
+          dataset,
+          fileName: file,
+          root: this._jurisdictionRootFromFilename(file),
+          name: String(data?.name || dataset).trim(),
+          data
+        });
+      }
+      return datasets;
+    }
+    _groupDatasetsByRoot(datasets) {
+      const byRoot = /* @__PURE__ */ new Map();
+      for (const info of datasets?.values?.() || []) {
+        const root = String(info?.root || "").trim().toLowerCase();
+        if (!root) continue;
+        if (!byRoot.has(root)) byRoot.set(root, []);
+        byRoot.get(root).push(info);
+      }
+      for (const infos of byRoot.values()) {
+        infos.sort((a, b) => String(a.fileName || "").localeCompare(String(b.fileName || "")));
+      }
+      return byRoot;
+    }
+    _pickLocaleDataset(datasetNames, prefix) {
+      const names = Array.isArray(datasetNames) ? datasetNames.slice() : [];
+      if (!names.length) return null;
+      const exactCandidates = selectLocaleFiles(names.map((name) => `${name}.json`), prefix, this.locale, ".json").map((file) => this._datasetNameFromFilename(file));
+      if (exactCandidates.length) {
+        return exactCandidates[0];
+      }
+      const exactPrefix = `${prefix}-`;
+      const lowerLocale = this._localeCandidates[0] || "";
+      for (const name of names) {
+        if (name.toLowerCase() === `${prefix}-${lowerLocale}`.toLowerCase()) return name;
+        if (name.toLowerCase().startsWith(exactPrefix)) return name;
+      }
+      return names[0];
+    }
+    _buildSecondaryDatasetOrder(loadedDatasets = []) {
+      const core = ["secondary-us-bluebook", "secondary-science"];
+      const loaded = Array.isArray(loadedDatasets) ? loadedDatasets : [];
+      const names = [];
+      for (const dataset of core) {
+        if (loaded.includes(dataset) && !names.includes(dataset)) names.push(dataset);
+      }
+      for (const dataset of loaded.slice().sort((a, b) => a.localeCompare(b))) {
+        if (!names.includes(dataset)) names.push(dataset);
+      }
+      return names;
+    }
+    _datasetNameFromFilename(fileName) {
+      return String(fileName || "").trim().replace(/\.json$/i, "");
+    }
+    _jurisdictionRootFromFilename(fileName) {
+      const stem = this._datasetNameFromFilename(fileName);
+      const body = stem.replace(/^auto-/i, "").replace(/^primary-/i, "").replace(/^secondary-/i, "").replace(/^juris-/i, "").replace(/-map$/i, "");
+      const root = body.split("-")[0];
+      return root ? root.toLowerCase().replace(/\+/g, ":") : null;
+    }
+    _jurisdictionRoot(rawJurisdiction) {
+      const jurisdiction = String(rawJurisdiction || "").trim().toLowerCase();
+      if (!jurisdiction || jurisdiction === "default") {
+        return this._defaultJurisdiction || "us";
+      }
+      return jurisdiction.split(":")[0] || (this._defaultJurisdiction || "us");
+    }
+    _pickDatasetInfoForRoot(byRoot, root, fallbackDatasetName = null) {
+      const normalizedRoot = String(root || "").trim().toLowerCase();
+      if (!normalizedRoot) return null;
+      const entries = byRoot?.get?.(normalizedRoot) || [];
+      if (Array.isArray(entries) && entries.length) {
+        const fallback = String(fallbackDatasetName || "").trim().toLowerCase();
+        if (fallback.startsWith("juris-") && fallback.endsWith("-map")) {
+          const exactMap = entries.find((entry) => String(entry.dataset || "").toLowerCase() === `juris-${normalizedRoot}-map`);
+          if (exactMap) return exactMap;
+        } else if (fallback.startsWith("primary-")) {
+          const exactPrimary = entries.find((entry) => String(entry.dataset || "").toLowerCase() === `primary-${normalizedRoot}`);
+          if (exactPrimary) return exactPrimary;
+        } else if (fallback.startsWith("auto-")) {
+          const exactAuto = entries.find((entry) => String(entry.dataset || "").toLowerCase() === `auto-${normalizedRoot}`);
+          if (exactAuto) return exactAuto;
+        }
+        return entries[0];
+      }
+      if (fallbackDatasetName) {
+        for (const group of byRoot?.values?.() || []) {
+          const match = group.find((entry) => entry.dataset === fallbackDatasetName);
+          if (match) return match;
+        }
+      }
+      return null;
+    }
+    _normalizeJurisdictionDatasetName(rawDataset) {
+      const dataset = String(rawDataset || "").trim();
+      if (!dataset) return this._defaultAutoDataset || "auto-us";
+      return dataset.replace(/^jurisdiction:/i, "");
+    }
+    _getJurisdictionDatasetInfo(rawDataset) {
+      const dataset = this._normalizeJurisdictionDatasetName(rawDataset);
+      if (this._autoDatasets.has(dataset)) {
+        return { kind: "auto", ...this._autoDatasets.get(dataset) };
+      }
+      if (this._primaryDatasets.has(dataset)) {
+        return { kind: "primary", ...this._primaryDatasets.get(dataset) };
+      }
+      if (this._mapDatasets.has(dataset)) {
+        return { kind: "map", ...this._mapDatasets.get(dataset) };
+      }
+      return null;
+    }
+    _getJurisdictionOverrideBucket(rawDataset) {
+      const dataset = this._normalizeJurisdictionDatasetName(rawDataset);
+      if (!dataset) return {};
+      const bucket = this._userJurisdictionOverrides?.[dataset];
+      return bucket && typeof bucket === "object" && !Array.isArray(bucket) ? bucket : {};
+    }
+    _getAutoDatasetInfoForJurisdiction(rawJurisdiction) {
+      const root = this._jurisdictionRoot(rawJurisdiction);
+      return this._pickDatasetInfoForRoot(this._autoDatasetsByRoot, root, this._defaultAutoDataset);
+    }
+    _getPrimaryDatasetInfoForJurisdiction(rawJurisdiction) {
+      const root = this._jurisdictionRoot(rawJurisdiction);
+      return this._pickDatasetInfoForRoot(this._primaryDatasetsByRoot, root, this._defaultPrimaryDataset);
+    }
+    _getMapDatasetInfoForJurisdiction(rawJurisdiction) {
+      const root = this._jurisdictionRoot(rawJurisdiction);
+      return this._pickDatasetInfoForRoot(this._mapDatasetsByRoot, root, this._defaultMapDataset);
     }
     normalizeKey(s) {
       return (s || "").toString().trim().toLowerCase().replace(/[“”]/g, '"').replace(/[’]/g, "'").replace(/[^a-z0-9\s\.-]/g, " ").replace(/\s+/g, " ").trim();
@@ -465,7 +737,12 @@ ${mlzBlock}` : mlzBlock;
       return { value: m[2], directive: m[1] };
     }
     lookupForCiteProc(category, key, jur, options = {}) {
-      const preferredJur = (jur || "default").toLowerCase();
+      const preferredJur = (jur || this._defaultJurisdiction || "default").toLowerCase();
+      const effectiveJur = preferredJur === "default" ? this._defaultJurisdiction || "us" : preferredJur;
+      const autoInfo = this._getAutoDatasetInfoForJurisdiction(effectiveJur) || this._getJurisdictionDatasetInfo(this._defaultAutoDataset) || { kind: "auto", dataset: this._defaultAutoDataset || "auto-us", data: this._autoUS };
+      const primaryData = this._primaryUS?.xdata || null;
+      const primaryOverrides = this._getJurisdictionOverrideBucket(this._defaultPrimaryDataset);
+      const autoOverrides = this._getJurisdictionOverrideBucket(autoInfo?.dataset);
       const noHints = !!options.noHints;
       const normalizedKey = this.normalizeKey(key);
       const normalizedKeyNoDots = normalizedKey.replace(/\./g, " ").replace(/\s+/g, " ").trim();
@@ -476,15 +753,15 @@ ${mlzBlock}` : mlzBlock;
       let hit = null;
       if (category === "institution-part") {
         hit = lookupJurChainWithOverrides(
-          this._autoUS?.xdata,
-          this._userJurisdictionOverrides?.["auto-us"],
-          preferredJur === "default" ? "us" : preferredJur,
+          autoInfo?.data?.xdata,
+          autoOverrides,
+          effectiveJur,
           "institution-part",
           key
         ) || lookupJurChainWithOverrides(
-          this._autoUS?.xdata,
-          this._userJurisdictionOverrides?.["auto-us"],
-          preferredJur === "default" ? "us" : preferredJur,
+          autoInfo?.data?.xdata,
+          autoOverrides,
+          effectiveJur,
           "institution-part",
           normalizedKey
         );
@@ -492,16 +769,16 @@ ${mlzBlock}` : mlzBlock;
         return null;
       }
       if (category === "place") {
-        const upper = (preferredJur === "default" ? "us" : preferredJur).toUpperCase();
-        const value = this._lookupAutoUSPlaceOverride(upper) || this._primaryJur?.xdata?.default?.place?.[upper] || this._autoUS?.xdata?.default?.place?.[upper] || null;
+        const upper = effectiveJur.toUpperCase();
+        const value = this._lookupAutoUSPlaceOverride(upper, autoInfo?.dataset) || this._primaryJur?.xdata?.default?.place?.[upper] || autoInfo?.data?.xdata?.default?.place?.[upper] || null;
         return value ? { jurisdiction: "default", value } : null;
       }
       if (category === "container-title") {
         for (const containerTitleKey of containerTitleKeys) {
           hit = lookupJurChainWithOverrides(
-            this._primaryUS?.xdata,
-            this._userJurisdictionOverrides?.["primary-us"],
-            preferredJur === "default" ? "us" : preferredJur,
+            primaryData,
+            primaryOverrides,
+            effectiveJur,
             "container-title",
             containerTitleKey
           );
@@ -516,9 +793,9 @@ ${mlzBlock}` : mlzBlock;
       }
       if (category === "title") {
         hit = lookupJurChainWithOverrides(
-          this._primaryUS?.xdata,
-          this._userJurisdictionOverrides?.["primary-us"],
-          preferredJur === "default" ? "us" : preferredJur,
+          primaryData,
+          primaryOverrides,
+          effectiveJur,
           "title",
           normalizedKey
         );
@@ -534,9 +811,9 @@ ${mlzBlock}` : mlzBlock;
       return this.lookupForCiteProc(listname, key, jur)?.value || null;
     }
     listAutoUSPlaceJurisdictions() {
-      const place = this._autoUS?.xdata?.default?.place || {};
+      const place = this._getAutoDatasetInfoForJurisdiction(this._defaultJurisdiction)?.data?.xdata?.default?.place || this._autoUS?.xdata?.default?.place || {};
       const keys = new Set(Object.keys(place));
-      for (const key of this._listAutoUSPlaceOverrideKeys()) {
+      for (const key of this._listAutoUSPlaceOverrideKeys(this._defaultAutoDataset)) {
         keys.add(key);
       }
       return Array.from(keys).map((key) => {
@@ -552,21 +829,23 @@ ${mlzBlock}` : mlzBlock;
       if (!jurisdiction) return "";
       const parts = jurisdiction.split(":").filter(Boolean);
       if (!parts.length) return "";
-      if (parts[0] !== "us") return jurisdiction;
-      const labels = [String(this._autoUS?.name || "United States").trim(), "US"];
-      let chain = "us";
+      const autoInfo = this._getAutoDatasetInfoForJurisdiction(jurisdiction) || { data: this._autoUS };
+      const rootCode = parts[0].toUpperCase();
+      const labels = [String(autoInfo?.data?.name || rootCode).trim(), rootCode];
+      let chain = rootCode.toLowerCase();
       for (let index = 1; index < parts.length; index += 1) {
         chain = `${chain}:${parts[index]}`;
-        const label = this._lookupJurisdictionPlaceLabel(chain) || parts[index].toUpperCase();
+        const label = this._lookupJurisdictionPlaceLabel(chain, autoInfo) || parts[index].toUpperCase();
         labels.push(this._normalizeJurisdictionDisplayLabel(chain, label));
       }
       return labels.join("|");
     }
     listInstitutionPartOptionsForJurisdiction(rawJurisdiction) {
-      const jurisdiction = (rawJurisdiction || "us").toString().trim().toLowerCase() || "us";
-      const normalizedJurisdiction = jurisdiction === "default" ? "us" : jurisdiction;
+      const jurisdiction = (rawJurisdiction || this._defaultJurisdiction || "us").toString().trim().toLowerCase() || "us";
+      const normalizedJurisdiction = jurisdiction === "default" ? this._defaultJurisdiction || "us" : jurisdiction;
+      const autoInfo = this._getAutoDatasetInfoForJurisdiction(normalizedJurisdiction) || { data: this._autoUS };
       const rows = [];
-      const entries = this._listInstitutionPartEntriesForJurisdiction(normalizedJurisdiction);
+      const entries = this._listInstitutionPartEntriesForJurisdiction(normalizedJurisdiction, autoInfo);
       for (const [key, value] of entries.entries()) {
         rows.push({
           key,
@@ -579,10 +858,11 @@ ${mlzBlock}` : mlzBlock;
       return rows.sort((a, b) => a.label.localeCompare(b.label) || a.key.localeCompare(b.key));
     }
     listInstitutionPartOptionsForJurisdictionTree(rawJurisdiction) {
-      const jurisdiction = (rawJurisdiction || "us").toString().trim().toLowerCase() || "us";
-      const normalizedJurisdiction = jurisdiction === "default" ? "us" : jurisdiction;
+      const jurisdiction = (rawJurisdiction || this._defaultJurisdiction || "us").toString().trim().toLowerCase() || "us";
+      const normalizedJurisdiction = jurisdiction === "default" ? this._defaultJurisdiction || "us" : jurisdiction;
+      const autoInfo = this._getAutoDatasetInfoForJurisdiction(normalizedJurisdiction) || { data: this._autoUS };
       const rows = [];
-      const exactEntries = this._listInstitutionPartEntriesForJurisdiction(normalizedJurisdiction);
+      const exactEntries = this._listInstitutionPartEntriesForJurisdiction(normalizedJurisdiction, autoInfo);
       for (const [key, value] of exactEntries.entries()) {
         rows.push({
           key,
@@ -594,17 +874,17 @@ ${mlzBlock}` : mlzBlock;
       }
       const childPrefix = `${normalizedJurisdiction}:`;
       const childJurisdictions = /* @__PURE__ */ new Set();
-      for (const childJur of Object.keys(this._autoUS?.xdata || {})) {
+      for (const childJur of Object.keys(autoInfo?.data?.xdata || {})) {
         if (childJur.startsWith(childPrefix)) childJurisdictions.add(childJur);
       }
-      for (const parsed of this._listAutoUSInstitutionPartOverrideEntries()) {
+      for (const parsed of this._listAutoUSInstitutionPartOverrideEntries(autoInfo?.dataset)) {
         if (parsed.jurisdiction.startsWith(childPrefix)) childJurisdictions.add(parsed.jurisdiction);
       }
       for (const childJur of Array.from(childJurisdictions).sort()) {
         if (!childJur.startsWith(childPrefix)) continue;
-        const childEntries = this._listInstitutionPartEntriesForJurisdiction(childJur);
+        const childEntries = this._listInstitutionPartEntriesForJurisdiction(childJur, autoInfo);
         if (!childEntries.size) continue;
-        const placeLabel = this._lookupJurisdictionPlaceLabel(childJur) || childJur;
+        const placeLabel = this._lookupJurisdictionPlaceLabel(childJur, autoInfo) || childJur;
         for (const [key, value] of childEntries.entries()) {
           rows.push({
             key,
@@ -621,22 +901,23 @@ ${mlzBlock}` : mlzBlock;
         return a.label.localeCompare(b.label) || a.key.localeCompare(b.key);
       });
     }
-    formatInstitutionPartDisplay(rawKey, rawJurisdiction = "us") {
+    formatInstitutionPartDisplay(rawKey, rawJurisdiction = this._defaultJurisdiction || "us") {
       const key = this.normalizeKey(rawKey);
       if (!key) return "";
-      const mapped = this._lookupCourtDisplayLabel(key);
+      const mapInfo = this._getMapDatasetInfoForJurisdiction(rawJurisdiction) || { data: this._jurisUSMap };
+      const mapped = this._lookupCourtDisplayLabel(key, mapInfo?.data);
       if (mapped) return mapped;
-      const lookupJurisdiction = (rawJurisdiction || "us").toString().trim().toLowerCase() || "us";
+      const lookupJurisdiction = (rawJurisdiction || this._defaultJurisdiction || "us").toString().trim().toLowerCase() || "us";
       const hit = this.lookupForCiteProc("institution-part", key, lookupJurisdiction, { noHints: true });
       const value = this.parseDirective(hit?.value).value;
       if (value) return value;
       return key.split(".").filter(Boolean).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
     }
-    _listInstitutionPartEntriesForJurisdiction(rawJurisdiction) {
+    _listInstitutionPartEntriesForJurisdiction(rawJurisdiction, autoInfo = null) {
       const jurisdiction = (rawJurisdiction || "us").toString().trim().toLowerCase();
       if (!jurisdiction) return /* @__PURE__ */ new Map();
       const entries = /* @__PURE__ */ new Map();
-      const baseEntries = this._autoUS?.xdata?.[jurisdiction]?.["institution-part"];
+      const baseEntries = autoInfo?.data?.xdata?.[jurisdiction]?.["institution-part"];
       if (baseEntries && typeof baseEntries === "object" && !Array.isArray(baseEntries)) {
         for (const [rawKey, rawValue] of Object.entries(baseEntries)) {
           const key = this.normalizeKey(rawKey);
@@ -645,15 +926,15 @@ ${mlzBlock}` : mlzBlock;
           entries.set(key, value);
         }
       }
-      for (const parsed of this._listAutoUSInstitutionPartOverrideEntries()) {
+      for (const parsed of this._listAutoUSInstitutionPartOverrideEntries(autoInfo?.dataset)) {
         if (parsed.jurisdiction !== jurisdiction) continue;
         if (!parsed.key || !parsed.value) continue;
         entries.set(parsed.key, parsed.value);
       }
       return entries;
     }
-    _listAutoUSInstitutionPartOverrideEntries() {
-      const bucket = this._userJurisdictionOverrides?.["auto-us"];
+    _listAutoUSInstitutionPartOverrideEntries(rawDataset = this._defaultAutoDataset) {
+      const bucket = this._getJurisdictionOverrideBucket(rawDataset);
       if (!bucket || typeof bucket !== "object" || Array.isArray(bucket)) return [];
       const rows = [];
       for (const [overrideKey, overrideValue] of Object.entries(bucket)) {
@@ -751,11 +1032,14 @@ ${mlzBlock}` : mlzBlock;
       return this.parseDirective(hit.value).value;
     }
     _lookupFallbackPhrase(normalized, jur, categories) {
-      const normalizedJur = jur === "default" ? "us" : jur;
+      const normalizedJur = jur === "default" ? this._defaultJurisdiction || "us" : jur;
+      const autoInfo = this._getAutoDatasetInfoForJurisdiction(normalizedJur) || this._getJurisdictionDatasetInfo(this._defaultAutoDataset) || { data: this._autoUS };
+      const primaryData = this._primaryUS?.xdata || null;
+      const primaryOverrides = this._getJurisdictionOverrideBucket(this._defaultPrimaryDataset);
       for (const category of categories) {
         const primaryHit = lookupJurChainWithOverrides(
-          this._primaryUS?.xdata,
-          this._userJurisdictionOverrides?.["primary-us"],
+          primaryData,
+          primaryOverrides,
           normalizedJur,
           category,
           normalized
@@ -769,19 +1053,20 @@ ${mlzBlock}` : mlzBlock;
     _lookupJurisdictionPlaceLabel(rawJurisdiction) {
       const jurisdiction = (rawJurisdiction || "").toString().trim().toUpperCase();
       if (!jurisdiction) return null;
-      return this._lookupAutoUSPlaceOverride(jurisdiction) || this._primaryJur?.xdata?.default?.place?.[jurisdiction] || this._autoUS?.xdata?.default?.place?.[jurisdiction] || null;
+      const autoInfo = this._getAutoDatasetInfoForJurisdiction(jurisdiction) || this._getJurisdictionDatasetInfo(this._defaultAutoDataset) || { data: this._autoUS };
+      return this._lookupAutoUSPlaceOverride(jurisdiction, autoInfo?.dataset) || this._primaryJur?.xdata?.default?.place?.[jurisdiction] || autoInfo?.data?.xdata?.default?.place?.[jurisdiction] || null;
     }
-    _lookupAutoUSPlaceOverride(rawJurisdiction) {
+    _lookupAutoUSPlaceOverride(rawJurisdiction, rawDataset = this._defaultAutoDataset) {
       const jurisdiction = (rawJurisdiction || "").toString().trim().toUpperCase();
       if (!jurisdiction) return null;
       const overrideKey = this._makeJurisdictionDatasetOverrideKey("default", "place", jurisdiction);
       if (!overrideKey) return null;
-      const bucket = this._userJurisdictionOverrides?.["auto-us"];
+      const bucket = this._getJurisdictionOverrideBucket(rawDataset);
       if (!bucket || !Object.prototype.hasOwnProperty.call(bucket, overrideKey)) return null;
       return bucket[overrideKey] || null;
     }
-    _listAutoUSPlaceOverrideKeys() {
-      const bucket = this._userJurisdictionOverrides?.["auto-us"];
+    _listAutoUSPlaceOverrideKeys(rawDataset = this._defaultAutoDataset) {
+      const bucket = this._getJurisdictionOverrideBucket(rawDataset);
       if (!bucket || typeof bucket !== "object" || Array.isArray(bucket)) return [];
       const keys = [];
       for (const overrideKey of Object.keys(bucket)) {
@@ -792,10 +1077,10 @@ ${mlzBlock}` : mlzBlock;
       }
       return keys;
     }
-    _lookupCourtDisplayLabel(rawKey) {
+    _lookupCourtDisplayLabel(rawKey, mapData = this._jurisUSMap) {
       const key = this.normalizeKey(rawKey);
       if (!key) return null;
-      const courts = this._jurisUSMap?.courts;
+      const courts = mapData?.courts;
       if (!Array.isArray(courts)) return null;
       for (const item of courts) {
         if (!Array.isArray(item) || item.length < 2) continue;
@@ -819,6 +1104,74 @@ ${mlzBlock}` : mlzBlock;
         value: merged[key],
         source: Object.prototype.hasOwnProperty.call(user, key) ? "user" : "base"
       }));
+    }
+    listSecondaryDatasetOptions() {
+      const rows = [];
+      const seen = /* @__PURE__ */ new Set();
+      for (const dataset of this._getSecondaryLookupOrder()) {
+        if (!this._secondaryDatasets?.[dataset] || seen.has(dataset)) continue;
+        seen.add(dataset);
+        rows.push({
+          dataset,
+          label: this._secondaryDatasetMeta.get(dataset)?.name || this._formatDatasetLabel(dataset),
+          isDefault: dataset === this._defaultSecondaryDataset
+        });
+      }
+      for (const dataset of Object.keys(this._secondaryDatasets || {}).sort((a, b) => a.localeCompare(b))) {
+        if (seen.has(dataset)) continue;
+        seen.add(dataset);
+        rows.push({
+          dataset,
+          label: this._secondaryDatasetMeta.get(dataset)?.name || this._formatDatasetLabel(dataset),
+          isDefault: dataset === this._defaultSecondaryDataset
+        });
+      }
+      return rows;
+    }
+    listPrimaryDatasetOptions() {
+      const rows = [];
+      const seen = /* @__PURE__ */ new Set();
+      for (const info of this._primaryDatasets.values()) {
+        if (!info || seen.has(info.dataset)) continue;
+        seen.add(info.dataset);
+        rows.push({
+          dataset: info.dataset,
+          label: this._formatJurisdictionDatasetLabel({ ...info, kind: "primary" }),
+          isDefault: info.dataset === this._defaultPrimaryDataset
+        });
+      }
+      return rows;
+    }
+    listPrimaryAbbreviations(rawDataset = this._defaultPrimaryDataset) {
+      return this.listJurisdictionPreferenceEntries(rawDataset);
+    }
+    upsertPrimaryAbbreviation(rawDataset, rawJurisdiction, category, key, value) {
+      return this.upsertJurisdictionPreferenceEntry(rawDataset, rawJurisdiction, category, key, value);
+    }
+    removePrimaryAbbreviation(rawDataset, rawJurisdiction, category, key) {
+      return this.removeJurisdictionPreferenceEntry(rawDataset, rawJurisdiction, category, key);
+    }
+    resetPrimaryAbbreviations(rawDataset = this._defaultPrimaryDataset) {
+      this.resetJurisdictionPreferenceOverrides(rawDataset);
+    }
+    listJurisdictionDatasetOptions() {
+      const rows = [];
+      const seen = /* @__PURE__ */ new Set();
+      const pushInfo = (info) => {
+        if (!info || seen.has(info.dataset)) return;
+        seen.add(info.dataset);
+        rows.push({
+          value: `jurisdiction:${info.dataset}`,
+          label: this._formatJurisdictionDatasetLabel(info),
+          dataset: info.dataset,
+          kind: info.kind,
+          isDefault: info.dataset === this._defaultAutoDataset || info.dataset === this._defaultMapDataset
+        });
+      };
+      for (const info of this._autoDatasets.values()) pushInfo({ kind: "auto", ...info });
+      for (const info of this._primaryDatasets.values()) pushInfo({ kind: "primary", ...info });
+      for (const info of this._mapDatasets.values()) pushInfo({ kind: "map", ...info });
+      return rows;
     }
     upsertSecondaryContainerTitleAbbreviation(rawDataset, rawKey, rawValue) {
       const dataset = this._normalizeSecondaryDataset(rawDataset);
@@ -847,12 +1200,17 @@ ${mlzBlock}` : mlzBlock;
       this._userSecondaryOverrides[dataset] = {};
       this._saveSecondaryOverrides();
     }
-    listJurisdictionPreferenceEntries() {
+    listJurisdictionPreferenceEntries(rawDataset = null) {
+      const info = this._getJurisdictionDatasetInfo(rawDataset) || this._getJurisdictionDatasetInfo(this._defaultAutoDataset);
       const rows = [];
-      this._collectXDataRows(rows, "primary-us", this._primaryUS?.xdata);
-      this._collectXDataRows(rows, "auto-us", this._autoUS?.xdata);
-      this._collectJurisMapRows(rows);
-      this._collectOverrideOnlyJurisdictionRows(rows);
+      if (info?.kind === "primary") {
+        this._collectXDataRows(rows, info.dataset, info.data?.xdata);
+      } else if (info?.kind === "map") {
+        this._collectJurisMapRows(rows, info);
+      } else {
+        this._collectXDataRows(rows, info?.dataset || this._defaultAutoDataset || "auto-us", info?.data?.xdata);
+      }
+      this._collectOverrideOnlyJurisdictionRows(rows, info?.dataset || null);
       return rows.sort((a, b) => {
         return a.dataset.localeCompare(b.dataset) || a.jurisdiction.localeCompare(b.jurisdiction) || a.category.localeCompare(b.category) || a.key.localeCompare(b.key);
       }).map((row) => ({
@@ -885,8 +1243,15 @@ ${mlzBlock}` : mlzBlock;
       this._saveJurisdictionOverrides();
       return true;
     }
-    resetJurisdictionPreferenceOverrides() {
-      this._userJurisdictionOverrides = {};
+    resetJurisdictionPreferenceOverrides(rawDataset = null) {
+      if (!rawDataset) {
+        this._userJurisdictionOverrides = {};
+        this._saveJurisdictionOverrides();
+        return;
+      }
+      const dataset = this._normalizeJurisdictionDatasetName(rawDataset);
+      if (!dataset) return;
+      delete this._userJurisdictionOverrides[dataset];
       this._saveJurisdictionOverrides();
     }
     _lookupSecondaryContainerTitle(normalizedKey, rawDataset = null) {
@@ -931,6 +1296,14 @@ ${mlzBlock}` : mlzBlock;
       const dataset = (rawDataset || "").toString().trim() || this._defaultSecondaryDataset;
       if (this._secondaryDatasets?.[dataset]) return dataset;
       return this._defaultSecondaryDataset;
+    }
+    _formatDatasetLabel(dataset) {
+      return String(dataset || "").replace(/^secondary-/i, "").replace(/-/g, " ").replace(/\b([a-z])/g, (match) => match.toUpperCase());
+    }
+    _formatJurisdictionDatasetLabel(info) {
+      const name = String(info?.name || "").trim();
+      if (!name) return this._formatDatasetLabel(info?.dataset);
+      return `${name} (${info.dataset})`;
     }
     _loadSecondaryOverrides() {
       try {
@@ -1024,8 +1397,10 @@ ${mlzBlock}` : mlzBlock;
         }
       }
     }
-    _collectJurisMapRows(rows) {
-      const courts = this._jurisUSMap?.courts;
+    _collectJurisMapRows(rows, mapInfo = this._jurisUSMap) {
+      const mapData = mapInfo?.data || mapInfo || this._jurisUSMap;
+      const dataset = mapInfo?.dataset || this._defaultMapDataset || "juris-us-map";
+      const courts = mapData?.courts;
       if (Array.isArray(courts)) {
         for (const item of courts) {
           if (!Array.isArray(item) || item.length < 2) continue;
@@ -1033,7 +1408,7 @@ ${mlzBlock}` : mlzBlock;
           const name = String(item[1] ?? "").trim();
           if (!code || !name) continue;
           const row = {
-            dataset: "juris-us-map",
+            dataset,
             jurisdiction: "default",
             category: "courts",
             key: code,
@@ -1043,7 +1418,7 @@ ${mlzBlock}` : mlzBlock;
           rows.push(row);
         }
       }
-      const jurisdictions = this._jurisUSMap?.jurisdictions?.default;
+      const jurisdictions = mapData?.jurisdictions?.default;
       if (Array.isArray(jurisdictions)) {
         for (const item of jurisdictions) {
           if (!Array.isArray(item) || item.length < 2) continue;
@@ -1051,7 +1426,7 @@ ${mlzBlock}` : mlzBlock;
           const name = String(item[1] ?? "").trim();
           if (!code || !name) continue;
           const row = {
-            dataset: "juris-us-map",
+            dataset,
             jurisdiction: "default",
             category: "jurisdictions",
             key: code,
@@ -1062,10 +1437,12 @@ ${mlzBlock}` : mlzBlock;
         }
       }
     }
-    _collectOverrideOnlyJurisdictionRows(rows) {
+    _collectOverrideOnlyJurisdictionRows(rows, allowedDataset = null) {
       const seen = new Set(rows.map((row) => row.id).filter(Boolean));
+      const normalizedAllowedDataset = allowedDataset ? this._normalizeJurisdictionDatasetName(allowedDataset) : null;
       for (const [dataset, bucket] of Object.entries(this._userJurisdictionOverrides || {})) {
         if (!bucket || typeof bucket !== "object" || Array.isArray(bucket)) continue;
+        if (normalizedAllowedDataset && dataset !== normalizedAllowedDataset) continue;
         for (const [overrideKey, overrideValue] of Object.entries(bucket)) {
           const parsed = this._parseJurisdictionDatasetOverrideKey(overrideKey);
           if (!parsed) continue;
@@ -2772,6 +3149,7 @@ ${mlzBlock}` : mlzBlock;
     }
   }
   async function activate({ id, version, rootURI }) {
+    const locale = Zotero?.locale || "en-US";
     _ctx = {
       id,
       version,
@@ -2786,11 +3164,11 @@ ${mlzBlock}` : mlzBlock;
     await _ctx.data.init();
     await _ensureBundledStylesInstalled({ rootURI, dataStore: _ctx.data });
     await _ensureBundledTranslatorsInstalled({ dataStore: _ctx.data });
-    _ctx.modules = new ModuleLoader({ rootURI, dataStore: _ctx.data });
+    _ctx.modules = new ModuleLoader({ rootURI, dataStore: _ctx.data, locale });
     await _ctx.modules.preload();
-    _ctx.abbrevs = new AbbrevService({ dataStore: _ctx.data });
+    _ctx.abbrevs = new AbbrevService({ dataStore: _ctx.data, locale });
     await _ctx.abbrevs.preload();
-    _ctx.caseCourtMapper = new CaseCourtMapper({ dataStore: _ctx.data });
+    _ctx.caseCourtMapper = new CaseCourtMapper({ dataStore: _ctx.data, locale });
     await _ctx.caseCourtMapper.preload();
     _ctx.patcher = new Patcher({
       moduleLoader: _ctx.modules,
@@ -2805,6 +3183,18 @@ ${mlzBlock}` : mlzBlock;
     });
     await _ctx.prefsUI.register();
     Zotero.IndigoBookCSLMBridge = {
+      listPrimaryDatasetOptions() {
+        return _ctx?.abbrevs?.listPrimaryDatasetOptions?.() || [];
+      },
+      listSecondaryDatasetOptions() {
+        return _ctx?.abbrevs?.listSecondaryDatasetOptions?.() || [];
+      },
+      listJurisdictionDatasetOptions() {
+        return _ctx?.abbrevs?.listJurisdictionDatasetOptions?.() || [];
+      },
+      listPrimaryAbbreviations(dataset = "primary-us") {
+        return _ctx?.abbrevs?.listPrimaryAbbreviations?.(dataset) || [];
+      },
       listSecondaryAbbreviations(dataset = "secondary-us-bluebook") {
         return _ctx?.abbrevs?.listSecondaryContainerTitleAbbreviations?.(dataset) || [];
       },
@@ -2825,8 +3215,18 @@ ${mlzBlock}` : mlzBlock;
         _ctx?.abbrevs?.resetSecondaryContainerTitleOverrides?.(dataset);
         return true;
       },
-      listJurisdictionPreferenceEntries() {
-        return _ctx?.abbrevs?.listJurisdictionPreferenceEntries?.() || [];
+      upsertPrimaryAbbreviation(dataset, jurisdiction, category, key, value) {
+        return !!_ctx?.abbrevs?.upsertPrimaryAbbreviation?.(dataset, jurisdiction, category, key, value);
+      },
+      removePrimaryAbbreviation(dataset, jurisdiction, category, key) {
+        return !!_ctx?.abbrevs?.removePrimaryAbbreviation?.(dataset, jurisdiction, category, key);
+      },
+      resetPrimaryAbbreviations(dataset = "primary-us") {
+        _ctx?.abbrevs?.resetPrimaryAbbreviations?.(dataset);
+        return true;
+      },
+      listJurisdictionPreferenceEntries(dataset = null) {
+        return _ctx?.abbrevs?.listJurisdictionPreferenceEntries?.(dataset) || [];
       },
       upsertJurisdictionPreferenceEntry(dataset, jurisdiction, category, key, value) {
         return !!_ctx?.abbrevs?.upsertJurisdictionPreferenceEntry?.(dataset, jurisdiction, category, key, value);
@@ -2834,8 +3234,8 @@ ${mlzBlock}` : mlzBlock;
       removeJurisdictionPreferenceEntry(dataset, jurisdiction, category, key) {
         return !!_ctx?.abbrevs?.removeJurisdictionPreferenceEntry?.(dataset, jurisdiction, category, key);
       },
-      resetJurisdictionPreferenceOverrides() {
-        _ctx?.abbrevs?.resetJurisdictionPreferenceOverrides?.();
+      resetJurisdictionPreferenceOverrides(dataset = null) {
+        _ctx?.abbrevs?.resetJurisdictionPreferenceOverrides?.(dataset);
         return true;
       }
     };

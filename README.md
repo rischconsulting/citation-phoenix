@@ -64,8 +64,8 @@ Journal abbreviations are primarily resolved from `container-title` values.
 
 Lookup order is:
 
-1. Primary jurisdiction data (`juris-abbrevs/primary-us.json`) for the current jurisdiction chain.
-2. Secondary journal table (`juris-abbrevs/secondary-us-bluebook.json`).
+1. Primary abbreviation table (`juris-abbrevs/primary-us.json`).
+2. Secondary journal table (`juris-abbrevs/secondary-us-bluebook.json` and any other `secondary-*.json` files).
 3. User journal overrides saved from the Preferences panel.
 4. Fallback word-based abbreviation logic when no table hit is found.
 
@@ -87,7 +87,7 @@ Pane location and assets:
 The panel supports two working modes via dataset selection:
 
 - Journals mode (`journals:secondary-us-bluebook`)
-- Jurisdiction mode (`juris-abbrevs/primary-us`, `juris-abbrevs/auto-us`, `juris-maps/juris-us-map`)
+- Jurisdiction mode (`juris-abbrevs/auto-us`, `juris-maps/juris-us-map`, and any other loaded jurisdiction datasets)
 
 ### What You Can Do In The Panel
 
@@ -160,15 +160,16 @@ Use this when you want to import or refresh the Juris-M-style asset folders from
 ./scripts/sync-juris-assets.ps1
 ```
 
-By default the script looks for a sibling `jurism-zotero` checkout, initializes its submodules if needed, and copies
-the canonical asset folders into:
+By default the script looks for a sibling `jurism-zotero` checkout, fetches and fast-forwards it, refreshes its
+submodules, and then copies the canonical asset folders into:
 
 - `style-modules/`
 - `juris-abbrevs/`
 - `juris-maps/`
 
 It accepts `-SourceRoot` and `-DestinationRoot` arguments if you want to mirror the files from another checkout or
-into another workspace.
+into another workspace. Pass `-UpdateSourceCheckout:$false` if you want to skip the Git refresh and just copy from the
+local source tree.
 
 To update the local Juris-M source checkout itself, run a Git fetch or pull inside `jurism-zotero/`, for example:
 

@@ -2,6 +2,8 @@
   let initialized = false;
   let initAttempts = 0;
   const HTML_NS = 'http://www.w3.org/1999/xhtml';
+  const JOURNAL_DATASET_PREFIX = 'journals:';
+  const ABBREVIATION_DATASET_PREFIX = 'abbrev:';
 
   function byId(id) {
     return document.getElementById(id);
@@ -24,14 +26,71 @@
   function getDatasetSelection() {
     const raw = (byId('ibcslm-dataset')?.value || '').toString();
     const parts = raw.split(':');
-    if (parts.length < 2) return { kind: 'journals', dataset: 'secondary-us-bluebook' };
+    if (parts.length < 2) {
+      const options = getDatasetOptions();
+      const defaultValue = options.find((row) => row.kind === 'jurisdiction' && row.isDefault)?.value
+        || options.find((row) => row.isDefault)?.value
+        || options[0]?.value
+        || `${JOURNAL_DATASET_PREFIX}secondary-us-bluebook`;
+      const fallbackParts = defaultValue.split(':');
+      return {
+        kind: fallbackParts[0] || 'journals',
+        dataset: fallbackParts.slice(1).join(':') || 'secondary-us-bluebook',
+      };
+    }
     const kind = parts[0];
     const dataset = parts.slice(1).join(':');
     return { kind, dataset };
   }
 
+  function getSecondaryDatasetOptions() {
+    const bridge = getBridge();
+    const rows = bridge?.listSecondaryDatasetOptions?.() || [];
+    if (Array.isArray(rows) && rows.length) return rows;
+    return [
+      { dataset: 'secondary-us-bluebook', label: 'Bluebook (US)', isDefault: true },
+    ];
+  }
+
+  function getPrimaryDatasetOptions() {
+    const bridge = getBridge();
+    const rows = bridge?.listPrimaryDatasetOptions?.() || [];
+    if (Array.isArray(rows) && rows.length) return rows;
+    return [
+      { dataset: 'primary-us', label: 'Primary legal sources for US jurisdictions', isDefault: true },
+    ];
+  }
+
+  function getDatasetOptions() {
+    const abbreviationOptions = getPrimaryDatasetOptions().map((row) => ({
+      value: `${ABBREVIATION_DATASET_PREFIX}${row.dataset}`,
+      label: `Abbreviations: ${row.label || row.dataset}`,
+      kind: 'abbrev',
+      dataset: row.dataset,
+      isDefault: !!row.isDefault,
+    }));
+    const journalOptions = getSecondaryDatasetOptions().map((row) => ({
+      value: `${JOURNAL_DATASET_PREFIX}${row.dataset}`,
+      label: `Journals: ${row.label || row.dataset}`,
+      kind: 'journals',
+      dataset: row.dataset,
+      isDefault: !!row.isDefault,
+    }));
+    const bridge = getBridge();
+    const jurisdictionOptions = bridge?.listJurisdictionDatasetOptions?.() || [];
+
+    return abbreviationOptions.concat(journalOptions, jurisdictionOptions.map((row) => ({
+      value: row.value || `jurisdiction:${row.dataset}`,
+      label: row.label || row.dataset,
+      kind: 'jurisdiction',
+      dataset: row.dataset || String(row.value || '').split(':').slice(1).join(':'),
+      isDefault: !!row.isDefault,
+    })));
+  }
+
   function isJournalMode() {
-    return getDatasetSelection().kind === 'journals';
+    const kind = getDatasetSelection().kind;
+    return kind === 'journals' || kind === 'abbrev';
   }
 
   function hasPaneDOM() {
@@ -53,9 +112,32 @@
     const search = byId('ibcslm-search');
     if (search) {
       search.placeholder = isJournalMode()
-        ? 'Filter journal abbreviations'
+        ? 'Filter abbreviations'
         : 'Filter jurisdiction rows';
     }
+  }
+
+  function populateDatasetOptions() {
+    const select = byId('ibcslm-dataset');
+    if (!select) return;
+
+    const currentValue = select.value;
+    const options = getDatasetOptions();
+    const fallbackValue = options.find((row) => row.kind === 'jurisdiction' && row.isDefault)?.value
+      || options.find((row) => row.isDefault)?.value
+      || options[0]?.value
+      || '';
+
+    select.textContent = '';
+    for (const row of options) {
+      const option = createHTML('option');
+      option.value = row.value;
+      option.textContent = row.label || row.value;
+      select.appendChild(option);
+    }
+
+    const hasCurrentValue = options.some((row) => row.value === currentValue);
+    select.value = hasCurrentValue ? currentValue : fallbackValue;
   }
 
   function getAllRowsForSelectedDataset() {
@@ -76,9 +158,20 @@
       }));
     }
 
-    const all = bridge.listJurisdictionPreferenceEntries?.() || [];
-    return all
-      .filter((row) => row.dataset === selection.dataset)
+    if (selection.kind === 'abbrev') {
+      const rows = bridge.listPrimaryAbbreviations?.(selection.dataset) || [];
+      return rows.map((row) => ({
+        kind: 'abbrev',
+        dataset: selection.dataset,
+        jurisdiction: row.jurisdiction || 'us',
+        category: row.category || '',
+        key: row.key,
+        value: row.value,
+        source: row.source,
+      }));
+    }
+
+    return (bridge.listJurisdictionPreferenceEntries?.(selection.dataset) || [])
       .map((row) => ({ ...row, kind: 'jurisdiction' }));
   }
 
@@ -111,6 +204,16 @@
       return !!bridge.upsertSecondaryAbbreviation?.(row.dataset, row.key, value);
     }
 
+    if (row.kind === 'abbrev') {
+      return !!bridge.upsertPrimaryAbbreviation?.(
+        row.dataset,
+        row.jurisdiction,
+        row.category,
+        row.key,
+        value,
+      );
+    }
+
     return !!bridge.upsertJurisdictionPreferenceEntry?.(
       row.dataset,
       row.jurisdiction,
@@ -126,6 +229,15 @@
 
     if (row.kind === 'journals') {
       return !!bridge.removeSecondaryAbbreviation?.(row.dataset, row.key);
+    }
+
+    if (row.kind === 'abbrev') {
+      return !!bridge.removePrimaryAbbreviation?.(
+        row.dataset,
+        row.jurisdiction,
+        row.category,
+        row.key,
+      );
     }
 
     return !!bridge.removeJurisdictionPreferenceEntry?.(
@@ -254,19 +366,19 @@
       return;
     }
 
-    if (selection.dataset === 'primary-us') {
+    if (selection.kind === 'abbrev') {
       if (!jurEl.value) jurEl.value = 'us';
       if (!catEl.value) catEl.value = 'container-title';
       return;
     }
 
-    if (selection.dataset === 'auto-us') {
+    if (selection.dataset.startsWith('auto-')) {
       if (!jurEl.value) jurEl.value = 'default';
       if (!catEl.value) catEl.value = 'place';
       return;
     }
 
-    if (selection.dataset === 'juris-us-map') {
+    if (selection.dataset.startsWith('juris-') && selection.dataset.endsWith('-map')) {
       if (!jurEl.value) jurEl.value = 'default';
       if (!catEl.value) catEl.value = 'courts';
     }
@@ -282,7 +394,12 @@
       return true;
     }
 
-    bridge.resetJurisdictionPreferenceOverrides?.();
+    if (selection.kind === 'abbrev') {
+      bridge.resetPrimaryAbbreviations?.(selection.dataset);
+      return true;
+    }
+
+    bridge.resetJurisdictionPreferenceOverrides?.(selection.dataset);
     return true;
   }
 
@@ -295,6 +412,7 @@
       return;
     }
 
+    populateDatasetOptions();
     applyModeClass();
     setAddDefaults();
 
@@ -304,6 +422,8 @@
     const selection = getDatasetSelection();
     const dsLabel = selection.kind === 'journals'
       ? `journals (${selection.dataset})`
+      : selection.kind === 'abbrev'
+        ? `abbreviations (${selection.dataset})`
       : `jurisdiction (${selection.dataset})`;
 
     if (!rows.length) {
@@ -334,6 +454,18 @@
       ok = !!bridge.upsertSecondaryAbbreviation?.(selection.dataset, key, value);
       if (!ok) {
         setStatus('Enter both key and value for journal overrides.', true);
+        return;
+      }
+    } else if (selection.kind === 'abbrev') {
+      ok = !!bridge.upsertPrimaryAbbreviation?.(
+        selection.dataset,
+        jurisdiction,
+        category,
+        key,
+        value,
+      );
+      if (!ok) {
+        setStatus('Enter jurisdiction, category, key, and value.', true);
         return;
       }
     } else {
