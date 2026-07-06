@@ -962,9 +962,10 @@ ${mlzBlock}` : mlzBlock;
     }
     getAvailableAbbrevDomains() {
       const out = {};
-      for (const [root, domains] of this._autoDomainsByRoot.entries()) {
-        if (!Array.isArray(domains) || !domains.length) continue;
-        out[root] = domains.slice();
+      for (const [root, infos] of this._autoDatasetsByRoot.entries()) {
+        if (!Array.isArray(infos) || !infos.length) continue;
+        const domains = this._autoDomainsByRoot.get(root);
+        out[root] = Array.isArray(domains) ? domains.slice() : [];
       }
       return out;
     }
@@ -1188,7 +1189,7 @@ ${mlzBlock}` : mlzBlock;
       for (const childJur of Object.keys(autoInfo?.data?.xdata || {})) {
         if (childJur.startsWith(childPrefix)) childJurisdictions.add(childJur);
       }
-      for (const parsed of this._listAutoUSInstitutionPartOverrideEntries(autoInfo?.dataset)) {
+      for (const parsed of this._listAutoUSInstitutionOverrideEntries(autoInfo?.dataset)) {
         if (parsed.jurisdiction.startsWith(childPrefix)) childJurisdictions.add(parsed.jurisdiction);
       }
       for (const childJur of Array.from(childJurisdictions).sort()) {
@@ -1219,50 +1220,63 @@ ${mlzBlock}` : mlzBlock;
       const mapped = this._lookupCourtDisplayLabel(key, mapInfo?.data);
       if (mapped) return mapped;
       const lookupJurisdiction = (rawJurisdiction || this._defaultJurisdiction || "us").toString().trim().toLowerCase() || "us";
-      const hit = this.lookupForCiteProc("institution-part", key, lookupJurisdiction, { noHints: true });
-      const value = this.parseDirective(hit?.value).value;
-      if (value) return value;
+      for (const category of ["institution-part", "institution-entire"]) {
+        const hit = this.lookupForCiteProc(category, key, lookupJurisdiction, { noHints: true });
+        const value = this.parseDirective(hit?.value).value;
+        if (value) return value;
+      }
       return key.split(".").filter(Boolean).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
     }
     _listInstitutionPartEntriesForJurisdiction(rawJurisdiction, autoInfo = null) {
       const jurisdiction = (rawJurisdiction || "us").toString().trim().toLowerCase();
       if (!jurisdiction) return /* @__PURE__ */ new Map();
       const entries = /* @__PURE__ */ new Map();
-      const baseEntries = autoInfo?.data?.xdata?.[jurisdiction]?.["institution-part"];
-      if (baseEntries && typeof baseEntries === "object" && !Array.isArray(baseEntries)) {
-        for (const [rawKey, rawValue] of Object.entries(baseEntries)) {
-          const key = this.normalizeKey(rawKey);
-          const value = String(rawValue ?? "").trim();
-          if (!key || !value) continue;
-          entries.set(key, value);
+      for (const category of ["institution-entire", "institution-part"]) {
+        const baseEntries = autoInfo?.data?.xdata?.[jurisdiction]?.[category];
+        if (baseEntries && typeof baseEntries === "object" && !Array.isArray(baseEntries)) {
+          for (const [rawKey, rawValue] of Object.entries(baseEntries)) {
+            const key = this.normalizeKey(rawKey);
+            const value = String(rawValue ?? "").trim();
+            if (!key || !value) continue;
+            entries.set(key, value);
+          }
         }
-      }
-      for (const parsed of this._listAutoUSInstitutionPartOverrideEntries(autoInfo?.dataset)) {
-        if (parsed.jurisdiction !== jurisdiction) continue;
-        if (!parsed.key || !parsed.value) continue;
-        entries.set(parsed.key, parsed.value);
+        for (const parsed of this._listAutoUSInstitutionOverrideEntries(autoInfo?.dataset)) {
+          if (parsed.category !== category) continue;
+          if (parsed.jurisdiction !== jurisdiction) continue;
+          if (!parsed.key || !parsed.value) continue;
+          entries.set(parsed.key, parsed.value);
+        }
       }
       return entries;
     }
-    _listAutoUSInstitutionPartOverrideEntries(rawDataset = this._defaultAutoDataset) {
+    _listAutoUSInstitutionOverrideEntries(rawDataset = this._defaultAutoDataset) {
       const bucket = this._getJurisdictionOverrideBucket(rawDataset);
       if (!bucket || typeof bucket !== "object" || Array.isArray(bucket)) return [];
+      const datasetRoot = this._jurisdictionRootFromFilename(rawDataset) || "us";
       const rows = [];
       for (const [overrideKey, overrideValue] of Object.entries(bucket)) {
         const parsed = this._parseJurisdictionDatasetOverrideKey(overrideKey);
         if (!parsed) continue;
-        if (parsed.category !== "institution-part") continue;
-        const jurisdiction = (parsed.jurisdiction || "").toString().trim().toLowerCase();
+        if (parsed.category !== "institution-part" && parsed.category !== "institution-entire") continue;
+        let jurisdiction = (parsed.jurisdiction || "").toString().trim().toLowerCase();
+        if (rawDataset && datasetRoot !== "us" && jurisdiction === "us") {
+          jurisdiction = datasetRoot;
+        }
         const key = this.normalizeKey(parsed.key);
         const value = String(overrideValue ?? "").trim();
         if (!jurisdiction || !key || !value) continue;
         rows.push({
           jurisdiction: jurisdiction === "default" ? "us" : jurisdiction,
           key,
-          value
+          value,
+          category: parsed.category
         });
       }
-      return rows;
+      return rows.sort((a, b) => {
+        const rank = (category) => category === "institution-part" ? 1 : 0;
+        return rank(a.category) - rank(b.category);
+      });
     }
     abbreviateContainerTitleFallback(title, jur) {
       return this._abbreviateByWords(title, jur, ["container-title"]);
@@ -1531,7 +1545,7 @@ ${mlzBlock}` : mlzBlock;
     }
     upsertJurisdictionPreferenceEntry(dataset, jurisdiction, category, key, value) {
       const ds = (dataset || "").toString().trim();
-      const normalizedJurisdiction = this._normalizeOverrideJurisdictionForCategory(jurisdiction, category);
+      const normalizedJurisdiction = this._normalizeOverrideJurisdictionForCategory(ds, jurisdiction, category);
       const id = this._makeJurisdictionDatasetOverrideKey(normalizedJurisdiction, category, key);
       const val = (value || "").toString().trim();
       if (!ds || !id || !val) return false;
@@ -1544,12 +1558,19 @@ ${mlzBlock}` : mlzBlock;
     }
     removeJurisdictionPreferenceEntry(dataset, jurisdiction, category, key) {
       const ds = (dataset || "").toString().trim();
-      const normalizedJurisdiction = this._normalizeOverrideJurisdictionForCategory(jurisdiction, category);
+      const normalizedJurisdiction = this._normalizeOverrideJurisdictionForCategory(ds, jurisdiction, category);
       const id = this._makeJurisdictionDatasetOverrideKey(normalizedJurisdiction, category, key);
       if (!ds || !id) return false;
       const bucket = this._userJurisdictionOverrides?.[ds];
-      if (!bucket || !Object.prototype.hasOwnProperty.call(bucket, id)) return false;
-      delete bucket[id];
+      if (!bucket) return false;
+      let targetID = id;
+      if (!Object.prototype.hasOwnProperty.call(bucket, targetID)) {
+        const legacyJurisdiction = this._normalizeLegacyOverrideJurisdictionForCategory(ds, normalizedJurisdiction, category);
+        const legacyID = this._makeJurisdictionDatasetOverrideKey(legacyJurisdiction, category, key);
+        if (!legacyID || !Object.prototype.hasOwnProperty.call(bucket, legacyID)) return false;
+        targetID = legacyID;
+      }
+      delete bucket[targetID];
       this._saveJurisdictionOverrides();
       return true;
     }
@@ -1563,6 +1584,213 @@ ${mlzBlock}` : mlzBlock;
       if (!dataset) return;
       delete this._userJurisdictionOverrides[dataset];
       this._saveJurisdictionOverrides();
+    }
+    importOverrides(kind, rawDataset, payload) {
+      const importKind = (kind || "").toString().trim().toLowerCase();
+      const xdata = payload?.xdata && typeof payload.xdata === "object" && !Array.isArray(payload.xdata) ? payload.xdata : payload;
+      const summary = this._createImportSummary();
+      if (!xdata || typeof xdata !== "object" || Array.isArray(xdata)) {
+        summary.error = "Import file did not contain an xdata object.";
+        return summary;
+      }
+      if (importKind === "journals") {
+        return this._importSecondaryOverrides(rawDataset, xdata, summary);
+      }
+      if (importKind === "abbrev" || importKind === "jurisdiction") {
+        return this._importJurisdictionOverrides(rawDataset, xdata, summary);
+      }
+      summary.error = `Unsupported import target: ${importKind || "unknown"}.`;
+      return summary;
+    }
+    _importSecondaryOverrides(rawDataset, xdata, summary) {
+      const dataset = this._normalizeSecondaryDataset(rawDataset);
+      const defaultRows = xdata?.default;
+      const containerTitles = defaultRows?.["container-title"];
+      if (!defaultRows || typeof defaultRows !== "object" || Array.isArray(defaultRows)) {
+        summary.error = "Import file did not contain xdata.default entries for journal abbreviations.";
+        return summary;
+      }
+      const existingRows = this.listSecondaryContainerTitleAbbreviations(dataset);
+      const existingByKey = new Map(existingRows.map((row) => [this.normalizeKey(row.key), String(row.value ?? "").trim()]));
+      let changed = false;
+      for (const [jurisdiction, categories] of Object.entries(xdata)) {
+        if (String(jurisdiction || "").trim().toLowerCase() !== "default") {
+          this._recordImportSkip(summary, "outside_selected_dataset_scope", jurisdiction);
+          continue;
+        }
+        if (!categories || typeof categories !== "object" || Array.isArray(categories)) {
+          this._recordImportSkip(summary, "invalid_category_block", jurisdiction);
+          continue;
+        }
+        for (const [category, entries] of Object.entries(categories)) {
+          const normalizedCategory = String(category || "").trim().toLowerCase();
+          if (normalizedCategory !== "container-title") {
+            this._recordImportSkip(summary, "unsupported_category", `default::${normalizedCategory}`);
+            continue;
+          }
+          if (!entries || typeof entries !== "object" || Array.isArray(entries)) {
+            this._recordImportSkip(summary, "invalid_entries_block", `default::${normalizedCategory}`);
+            continue;
+          }
+          for (const [rawKey, rawValue] of Object.entries(entries)) {
+            const key = this.normalizeKey(rawKey);
+            const value = String(rawValue ?? "").trim();
+            const context = `default::container-title::${String(rawKey || "").trim()}`;
+            if (!key || !value) {
+              this._recordImportSkip(summary, "blank_key_or_value", context);
+              continue;
+            }
+            const existingValue = existingByKey.get(key);
+            if (existingValue === value) {
+              this._recordImportSkip(summary, "unchanged", context);
+              continue;
+            }
+            if (!this._userSecondaryOverrides[dataset] || typeof this._userSecondaryOverrides[dataset] !== "object") {
+              this._userSecondaryOverrides[dataset] = {};
+            }
+            this._userSecondaryOverrides[dataset][key] = value;
+            existingByKey.set(key, value);
+            changed = true;
+            if (typeof existingValue === "string") {
+              summary.updated += 1;
+            } else {
+              summary.added += 1;
+            }
+          }
+        }
+      }
+      if (changed) this._saveSecondaryOverrides();
+      return this._finalizeImportSummary(summary);
+    }
+    _importJurisdictionOverrides(rawDataset, xdata, summary) {
+      const info = this._getJurisdictionDatasetInfo(rawDataset) || this._getJurisdictionDatasetInfo(this._defaultAutoDataset);
+      if (!info) {
+        summary.error = "Selected dataset could not be resolved.";
+        return summary;
+      }
+      if (info.kind === "map") {
+        summary.error = "Map datasets do not accept abbrev imports.";
+        return summary;
+      }
+      const dataset = info.dataset;
+      const root = String(info.root || this._jurisdictionRootFromFilename(dataset) || "").trim().toLowerCase();
+      const categories = this._getImportableJurisdictionCategories(info);
+      const existingRows = this.listJurisdictionPreferenceEntries(dataset);
+      const existingByID = new Map(
+        existingRows.map((row) => {
+          const id = this._makeJurisdictionDatasetOverrideKey(row.jurisdiction, row.category, row.key);
+          return id ? [id, String(row.value ?? "").trim()] : null;
+        }).filter(Boolean)
+      );
+      if (!this._userJurisdictionOverrides[dataset] || typeof this._userJurisdictionOverrides[dataset] !== "object") {
+        this._userJurisdictionOverrides[dataset] = {};
+      }
+      const bucket = this._userJurisdictionOverrides[dataset];
+      let changed = false;
+      for (const [rawJurisdiction, categoryRows] of Object.entries(xdata)) {
+        const jurisdiction = String(rawJurisdiction || "").trim().toLowerCase();
+        if (!this._isImportJurisdictionInScope(jurisdiction, root)) {
+          this._recordImportSkip(summary, "outside_selected_dataset_scope", jurisdiction);
+          continue;
+        }
+        if (!categoryRows || typeof categoryRows !== "object" || Array.isArray(categoryRows)) {
+          this._recordImportSkip(summary, "invalid_category_block", jurisdiction);
+          continue;
+        }
+        for (const [rawCategory, entries] of Object.entries(categoryRows)) {
+          const category = String(rawCategory || "").trim().toLowerCase();
+          const categoryContext = `${jurisdiction || "default"}::${category}`;
+          if (!categories.has(category)) {
+            this._recordImportSkip(summary, "unsupported_category", categoryContext);
+            continue;
+          }
+          if (!entries || typeof entries !== "object" || Array.isArray(entries)) {
+            this._recordImportSkip(summary, "invalid_entries_block", categoryContext);
+            continue;
+          }
+          for (const [rawKey, rawValue] of Object.entries(entries)) {
+            const key = String(rawKey || "").trim();
+            const value = String(rawValue ?? "").trim();
+            const context = `${jurisdiction || "default"}::${category}::${key}`;
+            if (!key || !value) {
+              this._recordImportSkip(summary, "blank_key_or_value", context);
+              continue;
+            }
+            const normalizedJurisdiction = this._normalizeOverrideJurisdictionForCategory(dataset, jurisdiction, category);
+            const id = this._makeJurisdictionDatasetOverrideKey(normalizedJurisdiction, category, key);
+            if (!id) {
+              this._recordImportSkip(summary, "invalid_override_key", context);
+              continue;
+            }
+            const existingValue = existingByID.get(id);
+            if (existingValue === value) {
+              this._recordImportSkip(summary, "unchanged", context);
+              continue;
+            }
+            bucket[id] = value;
+            existingByID.set(id, value);
+            changed = true;
+            if (typeof existingValue === "string") {
+              summary.updated += 1;
+            } else {
+              summary.added += 1;
+            }
+          }
+        }
+      }
+      if (changed) this._saveJurisdictionOverrides();
+      return this._finalizeImportSummary(summary);
+    }
+    _createImportSummary() {
+      return {
+        added: 0,
+        updated: 0,
+        skipped: 0,
+        skipReasons: /* @__PURE__ */ new Map(),
+        error: ""
+      };
+    }
+    _recordImportSkip(summary, reason, context = "") {
+      if (!summary?.skipReasons) return;
+      summary.skipped += 1;
+      const current = summary.skipReasons.get(reason) || { reason, count: 0, examples: [] };
+      current.count += 1;
+      const example = String(context || "").trim();
+      if (example && current.examples.length < 3 && !current.examples.includes(example)) {
+        current.examples.push(example);
+      }
+      summary.skipReasons.set(reason, current);
+    }
+    _finalizeImportSummary(summary) {
+      return {
+        added: summary.added,
+        updated: summary.updated,
+        skipped: summary.skipped,
+        error: summary.error || "",
+        skipReasons: Array.from(summary.skipReasons.values()).sort((a, b) => a.reason.localeCompare(b.reason))
+      };
+    }
+    _isImportJurisdictionInScope(jurisdiction, root) {
+      const jur = String(jurisdiction || "").trim().toLowerCase();
+      const normalizedRoot = String(root || "").trim().toLowerCase();
+      if (!jur) return false;
+      if (jur === "default") return true;
+      if (!normalizedRoot) return true;
+      return jur === normalizedRoot || jur.startsWith(`${normalizedRoot}:`);
+    }
+    _getImportableJurisdictionCategories(info) {
+      const categories = /* @__PURE__ */ new Set([
+        "container-title",
+        "institution-entire",
+        "institution-part",
+        "place",
+        "title"
+      ]);
+      for (const row of this.listJurisdictionPreferenceEntries(info?.dataset || null)) {
+        const category = String(row?.category || "").trim().toLowerCase();
+        if (category) categories.add(category);
+      }
+      return categories;
     }
     _lookupSecondaryContainerTitle(normalizedKey, rawDataset = null) {
       if (!normalizedKey) return null;
@@ -1666,7 +1894,8 @@ ${mlzBlock}` : mlzBlock;
       if (!jur || !cat || !k) return null;
       return `${jur}::${cat}::${k}`;
     }
-    _normalizeOverrideJurisdictionForCategory(jurisdiction, category) {
+    _normalizeOverrideJurisdictionForCategory(dataset, jurisdiction, category) {
+      const ds = (dataset || "").toString().trim().toLowerCase();
       const jur = (jurisdiction || "").toString().trim().toLowerCase();
       const cat = (category || "").toString().trim().toLowerCase();
       if (!jur) return jur;
@@ -1674,7 +1903,22 @@ ${mlzBlock}` : mlzBlock;
       if (cat === "place" || cat === "courts" || cat === "jurisdictions") {
         return "default";
       }
+      if (ds.startsWith("auto-")) {
+        return this._jurisdictionRootFromFilename(ds) || "us";
+      }
       return "us";
+    }
+    _normalizeLegacyOverrideJurisdictionForCategory(dataset, jurisdiction, category) {
+      const ds = (dataset || "").toString().trim().toLowerCase();
+      const jur = (jurisdiction || "").toString().trim().toLowerCase();
+      const cat = (category || "").toString().trim().toLowerCase();
+      if (!jur) return jur;
+      if (cat === "place" || cat === "courts" || cat === "jurisdictions") return jur;
+      if (ds.startsWith("auto-")) {
+        const root = this._jurisdictionRootFromFilename(ds) || "us";
+        if (jur === root && root !== "us") return "us";
+      }
+      return jur;
     }
     _getJurisdictionOverrideValue(id) {
       if (!id) return null;
@@ -1756,11 +2000,12 @@ ${mlzBlock}` : mlzBlock;
         for (const [overrideKey, overrideValue] of Object.entries(bucket)) {
           const parsed = this._parseJurisdictionDatasetOverrideKey(overrideKey);
           if (!parsed) continue;
-          const id = this._makeJurisdictionOverrideID(dataset, parsed.jurisdiction, parsed.category, parsed.key);
+          const mappedJurisdiction = this._normalizeListedOverrideJurisdiction(dataset, parsed.jurisdiction, parsed.category);
+          const id = this._makeJurisdictionOverrideID(dataset, mappedJurisdiction, parsed.category, parsed.key);
           if (!id || seen.has(id)) continue;
           rows.push({
             dataset: String(dataset),
-            jurisdiction: parsed.jurisdiction,
+            jurisdiction: mappedJurisdiction,
             category: parsed.category,
             key: parsed.key,
             value: String(overrideValue),
@@ -1778,6 +2023,18 @@ ${mlzBlock}` : mlzBlock;
       const key = String(parts.slice(2).join("::") || "").trim();
       if (!jurisdiction || !category || !key) return null;
       return { jurisdiction, category, key };
+    }
+    _normalizeListedOverrideJurisdiction(dataset, jurisdiction, category) {
+      const ds = (dataset || "").toString().trim().toLowerCase();
+      const jur = (jurisdiction || "").toString().trim().toLowerCase();
+      const cat = (category || "").toString().trim().toLowerCase();
+      if (!jur) return jur;
+      if (cat === "place" || cat === "courts" || cat === "jurisdictions") return jur;
+      if (ds.startsWith("auto-")) {
+        const root = this._jurisdictionRootFromFilename(ds) || "us";
+        if (jur === "us" && root !== "us") return root;
+      }
+      return jur;
     }
     _loadJurisdictionOverrides() {
       try {
@@ -4570,6 +4827,15 @@ ${mlzBlock}` : mlzBlock;
       resetJurisdictionPreferenceOverrides(dataset = null) {
         _ctx?.abbrevs?.resetJurisdictionPreferenceOverrides?.(dataset);
         return true;
+      },
+      importOverrides(kind, dataset, payload) {
+        return _ctx?.abbrevs?.importOverrides?.(kind, dataset, payload) || {
+          added: 0,
+          updated: 0,
+          skipped: 0,
+          error: "Import bridge unavailable.",
+          skipReasons: []
+        };
       }
     };
     _diagnostic(`[IndigoBook CSL-M] activated v${version}`);

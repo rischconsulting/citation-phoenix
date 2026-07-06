@@ -104,6 +104,70 @@
     el.style.color = isError ? '#a40000' : '';
   }
 
+  function readFileAsText(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(reader.error || new Error('Could not read import file.'));
+      reader.readAsText(file);
+    });
+  }
+
+  function formatSkipReason(reason) {
+    const labels = {
+      blank_key_or_value: 'blank key or value',
+      invalid_category_block: 'invalid category block',
+      invalid_entries_block: 'invalid entries block',
+      invalid_override_key: 'invalid override key',
+      outside_selected_dataset_scope: 'outside selected dataset scope',
+      unchanged: 'already matched existing value',
+      unsupported_category: 'unsupported category',
+    };
+    return labels[reason] || reason.replace(/_/g, ' ');
+  }
+
+  function formatImportSummary(result, selection) {
+    const parts = [
+      `Imported into ${selection.dataset}: ${result.added} added`,
+      `${result.updated} updated`,
+      `${result.skipped} skipped`,
+    ];
+    if (result.error) {
+      return result.error;
+    }
+    return `${parts.join(', ')}.`;
+  }
+
+  function describeImportSkips(result) {
+    const reasons = Array.isArray(result?.skipReasons) ? result.skipReasons : [];
+    if (!reasons.length) return '';
+    return reasons.map((entry) => {
+      const examples = Array.isArray(entry.examples) && entry.examples.length
+        ? ` Examples: ${entry.examples.join('; ')}`
+        : '';
+      return `${formatSkipReason(entry.reason)} (${entry.count}).${examples}`;
+    }).join('\n');
+  }
+
+  function showImportResultDialog(message) {
+    const text = String(message || '').trim();
+    if (!text) return;
+    try {
+      const promptService = Components?.classes?.['@mozilla.org/embedcomp/prompt-service;1']
+        ?.getService?.(Components.interfaces.nsIPromptService);
+      if (promptService?.alert) {
+        promptService.alert(window, 'Phoenix Import', text);
+        return;
+      }
+    } catch (_) {}
+
+    try {
+      window.alert(text);
+    } catch (_) {
+      setStatus(text, false);
+    }
+  }
+
   function applyModeClass() {
     const root = byId('ibcslm-prefpane');
     if (!root) return;
@@ -493,10 +557,59 @@
     refresh();
   }
 
+  async function handleImportSelection() {
+    const fileInput = byId('ibcslm-import-file');
+    const file = fileInput?.files?.[0];
+    if (!file) return;
+
+    const bridge = getBridge();
+    const selection = getDatasetSelection();
+    if (!bridge) {
+      setStatus('Bridge unavailable. Restart Zotero after installing/updating the plugin.', true);
+      return;
+    }
+
+    try {
+      const rawText = await readFileAsText(file);
+      let payload = null;
+      try {
+        payload = JSON.parse(rawText);
+      } catch (error) {
+        setStatus(`Could not parse JSON import file: ${String(error?.message || error)}`, true);
+        return;
+      }
+
+      const result = bridge.importOverrides?.(selection.kind, selection.dataset, payload);
+      if (!result || result.error) {
+        setStatus(result?.error || 'Import failed.', true);
+        return;
+      }
+
+      const summary = formatImportSummary(result, selection);
+      const skipDetails = describeImportSkips(result);
+      setStatus(summary, false);
+      refresh();
+      showImportResultDialog(skipDetails ? `${summary}\n\nSkipped items:\n${skipDetails}` : summary);
+    } catch (error) {
+      setStatus(`Import failed: ${String(error?.message || error)}`, true);
+    } finally {
+      if (fileInput) fileInput.value = '';
+    }
+  }
+
   function bindEvents() {
     byId('ibcslm-dataset')?.addEventListener('change', refresh);
     byId('ibcslm-search')?.addEventListener('input', refresh);
     byId('ibcslm-add')?.addEventListener('click', handleAddOrUpdate);
+    byId('ibcslm-import')?.addEventListener('click', () => {
+      const fileInput = byId('ibcslm-import-file');
+      if (!fileInput) return;
+      fileInput.value = '';
+      fileInput.click();
+    });
+    byId('ibcslm-import-file')?.addEventListener('change', () => {
+      handleImportSelection();
+    });
     byId('ibcslm-reset')?.addEventListener('click', () => {
       const ok = resetOverridesForCurrentDataset();
       setStatus(ok ? 'Overrides reset.' : 'Could not reset overrides.', !ok);
