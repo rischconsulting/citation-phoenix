@@ -1,11 +1,20 @@
 {
   "filename": "auto-li.json",
   "name": "Liechtenstein",
-  "version": "2020-09-07 21:01:30 UTC",
+  "version": "2026-07-06 21:31:38 UTC",
   "xdata": {
     "default": {
       "place": {
         "LI": "Liechtenstein"
+      }
+    },
+    "li": {
+      "institution-part": {
+        "flg": "FLG",
+        "fog": "FOG",
+        "fogh": "FOGH",
+        "stgh": "StGH",
+        "vgh": "VGH"
       }
     }
   }
