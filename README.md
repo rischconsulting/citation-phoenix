@@ -1,4 +1,4 @@
-# IndigoBook-Phoenix (Zotero 8, 9) - v0.8.0
+# Citation-Phoenix (Zotero 8, 9) - v0.8.0
 
 Now multi-jurisdictional.
 
