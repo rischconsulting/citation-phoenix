@@ -1,7 +1,7 @@
 {
-  "filename": "auto-ch.json",
+  "filename": "auto-ch-fr.json",
   "name": "Switzerland",
-  "version": "2026-07-08 20:45:38 UTC",
+  "version": "2026-07-06 20:29:47 UTC",
   "xdata": {
     "default": {
       "place": {
@@ -34,10 +34,10 @@
     },
     "ch": {
       "institution-part": {
-        "fcc": "BStGer",
-        "fsc": "BGer",
-        "fac": "BVGer",
-        "fpc": "BPatGer"
+        "fcc": "TPF",
+        "fsc": "TF",
+        "fac": "TAF",
+        "fpc": "TBF"
       }
     },
     "ch:aargau": {

@@ -7,6 +7,15 @@
       "place": {
         "LI": "Liechtenstein"
       }
+    },
+    "li": {
+      "institution-part": {
+        "flg": "FLG",
+        "fog": "FOG",
+        "fogh": "FOGH",
+        "stgh": "StGH",
+        "vgh": "VGH"
+      }
     }
   }
 }
