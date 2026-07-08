@@ -6,7 +6,7 @@
     "default": {
       "place": {
         "AT": "Austria",
-        "AT:BURGENLAND": "Burgenland",
+        "AT:BURGENLAND": "Bgld",
         "AT:GRAZ": "Graz",
         "AT:GRAZ:GRAZ": "Graz",
         "AT:GRAZ:GRAZ:DEUTSCHLANDSBERG": "Deutschlandsberg",
@@ -58,7 +58,7 @@
         "AT:INNSBRUCK:INNSBRUCK:SILZ": "Silz",
         "AT:INNSBRUCK:INNSBRUCK:TELFS": "Telfs",
         "AT:INNSBRUCK:INNSBRUCK:ZELL.AM.ZILLER": "Zell am Ziller",
-        "AT:KARNTEN": "Kärnten",
+        "AT:KARNTEN": "Krnt",
         "AT:LINZ": "Linz",
         "AT:LINZ:LINZ": "Linz",
         "AT:LINZ:LINZ:FREISTADT": "Freistadt",
@@ -91,12 +91,12 @@
         "AT:LINZ:WELS:GRIESKIRCHEN": "Grieskirchen",
         "AT:LINZ:WELS:VOCKLABRUCK": "Vöcklabruck",
         "AT:LINZ:WELS:WELS": "Wels",
-        "AT:NIEDEROSTERREICH": "Niederösterreich",
-        "AT:OBEROSTERREICH": "Oberösterreich",
-        "AT:SALZBURG": "Salzburg",
-        "AT:STEIERMARK": "Steiermark",
-        "AT:TIROL": "Tirol",
-        "AT:VORARLBERG": "Vorarlberg",
+        "AT:NIEDEROSTERREICH": "NÖ",
+        "AT:OBEROSTERREICH": "OÖ",
+        "AT:SALZBURG": "Sbg",
+        "AT:STEIERMARK": "Stmk",
+        "AT:TIROL": "Tir",
+        "AT:VORARLBERG": "Vlbg",
         "AT:WIEN": "Wien",
         "AT:WIEN:EISENSTADT": "Eisenstadt",
         "AT:WIEN:EISENSTADT:EISENSTADT": "Eisenstadt",
@@ -188,8 +188,8 @@
         "uvs": "Unabhängiger Verwaltungssenat"
       },
       "institution-entire": {
-        "lvwg": "LVwG Burgenland",
-        "uvs": "UVS Burgenland"
+        "lvwg": "LVwG Bgld",
+        "uvs": "UVS Bgld"
       }
     },
     "at:graz": {
@@ -608,8 +608,8 @@
         "uvs": "Unabhängiger Verwaltungssenat"
       },
       "institution-entire": {
-        "lvwg": "LVwG Kärnten",
-        "uvs": "UVS Kärnten"
+        "lvwg": "LVwG Krnt",
+        "uvs": "UVS Krnt"
       }
     },
     "at:linz": {
@@ -874,8 +874,8 @@
         "uvs": "Unabhängiger Verwaltungssenat"
       },
       "institution-entire": {
-        "lvwg": "LVwG Niederösterreich",
-        "uvs": "UVS Niederösterreich"
+        "lvwg": "LVwG NÖ",
+        "uvs": "UVS NÖ"
       }
     },
     "at:oberosterreich": {
@@ -884,8 +884,8 @@
         "uvs": "Unabhängiger Verwaltungssenat"
       },
       "institution-entire": {
-        "lvwg": "LVwG Oberösterreich",
-        "uvs": "UVS Oberösterreich"
+        "lvwg": "LVwG OÖ",
+        "uvs": "UVS OÖ"
       }
     },
     "at:salzburg": {
@@ -894,8 +894,8 @@
         "uvs": "Unabhängiger Verwaltungssenat"
       },
       "institution-entire": {
-        "lvwg": "LVwG Salzburg",
-        "uvs": "UVS Salzburg"
+        "lvwg": "LVwG Sbg",
+        "uvs": "UVS Sbg"
       }
     },
     "at:steiermark": {
@@ -904,8 +904,8 @@
         "uvs": "Unabhängiger Verwaltungssenat"
       },
       "institution-entire": {
-        "lvwg": "LVwG Steiermark",
-        "uvs": "UVS Steiermark"
+        "lvwg": "LVwG Stmk",
+        "uvs": "UVS Stmk"
       }
     },
     "at:tirol": {
@@ -914,8 +914,8 @@
         "uvs": "Unabhängiger Verwaltungssenat"
       },
       "institution-entire": {
-        "lvwg": "LVwG Tirol",
-        "uvs": "UVS Tirol"
+        "lvwg": "LVwG Tir",
+        "uvs": "UVS Tir"
       }
     },
     "at:vorarlberg": {
@@ -924,8 +924,8 @@
         "uvs": "Unabhängiger Verwaltungssenat"
       },
       "institution-entire": {
-        "lvwg": "LVwG Vorarlberg",
-        "uvs": "UVS Vorarlberg"
+        "lvwg": "LVwG Vlbg",
+        "uvs": "UVS Vlbg"
       }
     },
     "at:wien": {
@@ -936,7 +936,7 @@
       },
       "institution-entire": {
         "olg": "OLG Wien",
-        "vgw": "VGW",
+        "vgw": "LVwG Wien",
         "uvs": "UVS Wien"
       }
     },
