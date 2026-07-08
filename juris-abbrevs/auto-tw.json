@@ -1,0 +1,12 @@
+{
+  "filename": "auto-tw.json",
+  "name": "Republic of China",
+  "version": "2026-07-08 20:45:39 UTC",
+  "xdata": {
+    "default": {
+      "place": {
+        "TW": "Republic of China"
+      }
+    }
+  }
+}

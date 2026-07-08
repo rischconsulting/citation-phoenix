@@ -1,0 +1,12 @@
+{
+  "filename": "auto-mk.json",
+  "name": "Macedonia",
+  "version": "2026-07-08 20:45:39 UTC",
+  "xdata": {
+    "default": {
+      "place": {
+        "MK": "Macedonia"
+      }
+    }
+  }
+}

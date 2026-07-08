@@ -1,0 +1,12 @@
+{
+  "filename": "auto-ag.json",
+  "name": "Antigua and Barbuda",
+  "version": "2026-07-08 20:45:38 UTC",
+  "xdata": {
+    "default": {
+      "place": {
+        "AG": "Antigua and Barbuda"
+      }
+    }
+  }
+}

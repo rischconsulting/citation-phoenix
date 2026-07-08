@@ -1,0 +1,12 @@
+{
+  "filename": "auto-lt.json",
+  "name": "Lithuania",
+  "version": "2026-07-08 20:45:39 UTC",
+  "xdata": {
+    "default": {
+      "place": {
+        "LT": "Lithuania"
+      }
+    }
+  }
+}

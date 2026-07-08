@@ -1,0 +1,12 @@
+{
+  "filename": "auto-do.json",
+  "name": "Dominican Republic",
+  "version": "2026-07-08 20:45:38 UTC",
+  "xdata": {
+    "default": {
+      "place": {
+        "DO": "Dominican Republic"
+      }
+    }
+  }
+}

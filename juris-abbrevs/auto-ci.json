@@ -1,0 +1,12 @@
+{
+  "filename": "auto-ci.json",
+  "name": "Côte d'Ivoire",
+  "version": "2026-07-08 20:45:38 UTC",
+  "xdata": {
+    "default": {
+      "place": {
+        "CI": "Côte d'Ivoire"
+      }
+    }
+  }
+}

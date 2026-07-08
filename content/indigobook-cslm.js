@@ -32,13 +32,11 @@ var IndigoBookCSLM = (() => {
     }
     async init() {
       await Promise.all([
-        this.loadJSON("data/auto-us.json").catch(() => null),
-        this.loadJSON("data/juris-us-map.json").catch(() => null),
-        this.loadJSON("data/primary-jurisdictions.json").catch(() => null),
-        this.loadJSON("data/primary-us.json").catch(() => null),
-        this.loadJSON("data/secondary-us-bluebook.json").catch(() => null),
-        this.loadJSON("data/secondary-science.json").catch(() => null),
-        this.loadJSON("style-modules/index.json").catch(() => null)
+        this.loadJSON("style-modules/index.json").catch(() => null),
+        this.loadJSON("juris-abbrevs/DIRECTORY_LISTING.json").catch(() => null),
+        this.loadJSON("juris-maps/DIRECTORY_LISTING.json").catch(() => null),
+        this.loadJSON("juris-maps/versions.json").catch(() => null),
+        this.loadJSON("juris-maps/primary-jurisdictions.json").catch(() => null)
       ]);
     }
     async loadText(relPath) {
@@ -55,6 +53,28 @@ var IndigoBookCSLM = (() => {
       const obj = JSON.parse(text);
       this.cache.set(relPath, obj);
       return obj;
+    }
+    async loadTextAny(relPaths) {
+      const paths = Array.isArray(relPaths) ? relPaths : [relPaths];
+      for (const relPath of paths) {
+        if (!relPath) continue;
+        try {
+          return await this.loadText(relPath);
+        } catch (error) {
+        }
+      }
+      return null;
+    }
+    async loadJSONAny(relPaths) {
+      const paths = Array.isArray(relPaths) ? relPaths : [relPaths];
+      for (const relPath of paths) {
+        if (!relPath) continue;
+        try {
+          return await this.loadJSON(relPath);
+        } catch (error) {
+        }
+      }
+      return null;
     }
   };
 
@@ -76,6 +96,55 @@ var IndigoBookCSLM = (() => {
       } catch (e) {
         return null;
       }
+    }
+    static getMLZExtraCreators(itemOrExtra) {
+      const extra = typeof itemOrExtra === "string" ? itemOrExtra : itemOrExtra?.getField?.("extra") || itemOrExtra?.extra || "";
+      const jsonText = this._extractMLZJSON(extra);
+      if (!jsonText) return [];
+      try {
+        const obj = JSON.parse(jsonText);
+        return Array.isArray(obj?.extracreators) ? obj.extracreators : [];
+      } catch (e) {
+        return [];
+      }
+    }
+    static getMLZExtraCreatorsByType(itemOrExtra, creatorType) {
+      const normalizedType = String(creatorType || "").trim().toLowerCase();
+      if (!normalizedType) return [];
+      return this.getMLZExtraCreators(itemOrExtra).filter((creator) => String(creator?.creatorType || "").trim().toLowerCase() === normalizedType).map((creator) => ({ ...creator }));
+    }
+    static updateMLZExtraCreators(itemOrExtra, creatorType, creators) {
+      const extra = typeof itemOrExtra === "string" ? itemOrExtra : itemOrExtra?.getField?.("extra") || itemOrExtra?.extra || "";
+      const normalizedType = String(creatorType || "").trim().toLowerCase();
+      if (!normalizedType) return extra;
+      const parsed = this._getMLZPayloadAndRange(extra);
+      const payload = parsed.payload || {};
+      const existingCreators = Array.isArray(payload.extracreators) ? payload.extracreators : [];
+      const retainedCreators = existingCreators.filter((creator) => {
+        return String(creator?.creatorType || "").trim().toLowerCase() !== normalizedType;
+      });
+      const incomingCreators = Array.isArray(creators) ? creators : [];
+      for (const creator of incomingCreators) {
+        const normalizedCreator = this._normalizeExtraCreator(creator, normalizedType);
+        if (normalizedCreator) retainedCreators.push(normalizedCreator);
+      }
+      if (retainedCreators.length) payload.extracreators = retainedCreators;
+      else delete payload.extracreators;
+      const hasExtraFields = payload.extrafields && typeof payload.extrafields === "object" && !Array.isArray(payload.extrafields) && Object.keys(payload.extrafields).length;
+      const hasExtraCreators = Array.isArray(payload.extracreators) && payload.extracreators.length;
+      if (!hasExtraFields && !hasExtraCreators) {
+        if (parsed.start != null && parsed.end != null) {
+          return this._removeMLZBlock(extra, parsed.start, parsed.end);
+        }
+        return extra;
+      }
+      const mlzBlock = `mlzsync1:${JSON.stringify(payload)}`;
+      if (parsed.start != null && parsed.end != null) {
+        return `${extra.slice(0, parsed.start)}${mlzBlock}${extra.slice(parsed.end)}`;
+      }
+      const base = String(extra || "").trimEnd();
+      return base ? `${base}
+${mlzBlock}` : mlzBlock;
     }
     static getMLZJurisdiction(itemOrExtra) {
       const fields = this.getMLZExtraFields(itemOrExtra);
@@ -103,6 +172,15 @@ var IndigoBookCSLM = (() => {
       const value = fieldValue == null ? "" : String(fieldValue).trim();
       if (value) payload.extrafields[field] = value;
       else delete payload.extrafields[field];
+      if (!Object.keys(payload.extrafields).length) delete payload.extrafields;
+      const hasExtraFields = payload.extrafields && typeof payload.extrafields === "object" && !Array.isArray(payload.extrafields) && Object.keys(payload.extrafields).length;
+      const hasExtraCreators = Array.isArray(payload.extracreators) && payload.extracreators.length;
+      if (!hasExtraFields && !hasExtraCreators) {
+        if (parsed.start != null && parsed.end != null) {
+          return this._removeMLZBlock(extra, parsed.start, parsed.end);
+        }
+        return extra;
+      }
       const mlzBlock = `mlzsync1:${JSON.stringify(payload)}`;
       if (parsed.start != null && parsed.end != null) {
         return `${extra.slice(0, parsed.start)}${mlzBlock}${extra.slice(parsed.end)}`;
@@ -201,6 +279,31 @@ ${mlzBlock}` : mlzBlock;
         }
       }
       return { payload: null, start: markerIndex, end: source.length };
+    }
+    static _removeMLZBlock(extra, start, end) {
+      const source = String(extra || "");
+      const prefix = source.slice(0, start).replace(/[ \t]+\n?$/, "");
+      const suffix = source.slice(end).replace(/^\r?\n/, "");
+      const combined = `${prefix}${prefix && suffix ? "\n" : ""}${suffix}`;
+      return combined.trimEnd();
+    }
+    static _normalizeExtraCreator(creator, creatorType) {
+      if (!creator || typeof creator !== "object") return null;
+      const literalName = String(creator.name || "").trim();
+      if (literalName) {
+        return {
+          name: literalName,
+          creatorType
+        };
+      }
+      const firstName = String(creator.firstName || "").trim();
+      const lastName = String(creator.lastName || "").trim();
+      if (!firstName && !lastName) return null;
+      return {
+        firstName,
+        lastName,
+        creatorType
+      };
     }
     static _decodeLengthPrefixedJurisdiction(s) {
       if (!s || s.length < 4) return null;
@@ -362,76 +465,509 @@ ${mlzBlock}` : mlzBlock;
 
   // lib/services/moduleLoader.mjs
   var ModuleLoader = class {
-    constructor({ rootURI, dataStore }) {
+    constructor({ rootURI, dataStore, locale }) {
       this.rootURI = rootURI;
       this.dataStore = dataStore;
+      this.locale = locale;
+      this._defaultJurisdiction = "us";
       this._availableFiles = [];
       this._byFile = /* @__PURE__ */ new Map();
       this._byJur = /* @__PURE__ */ new Map();
+      this._byModuleID = /* @__PURE__ */ new Map();
     }
     async preload() {
       const idx = await this.dataStore.loadJSON("style-modules/index.json");
-      this._availableFiles = idx?.files || [];
+      const allFiles = Array.isArray(idx?.files) ? idx.files.slice() : [];
+      this._availableFiles = allFiles.filter((file) => /\.csl$/i.test(file) && file.toLowerCase().startsWith("juris-")).sort((a, b) => a.localeCompare(b));
       for (const file of this._availableFiles) {
         const path = "style-modules/" + file;
         const xml = await this.dataStore.loadText(path);
         this._byFile.set(file, xml);
-        const jur = this._jurFromFilename(file);
-        if (jur) this._byJur.set(jur, xml);
+        const info = this._parseModuleFilename(file);
+        if (!info) continue;
+        this._byModuleID.set(info.id, xml);
+        let byVariant = this._byJur.get(info.jurisdiction);
+        if (!byVariant) {
+          byVariant = /* @__PURE__ */ new Map();
+          this._byJur.set(info.jurisdiction, byVariant);
+        }
+        byVariant.set(info.variant, xml);
       }
-      if (!this._byJur.has("us")) {
-        const baseFile = this._availableFiles.find((f) => f === "juris-us-IndigoTemp.csl");
-        if (baseFile) this._byJur.set("us", this._byFile.get(baseFile));
+      if (!this._hasModuleForJurisdiction(this._defaultJurisdiction) && this._availableFiles.length) {
+        const firstInfo = this._parseModuleFilename(this._availableFiles[0]);
+        const firstRoot = firstInfo?.jurisdiction?.split(":")[0] || "";
+        if (firstRoot && this._hasModuleForJurisdiction(firstRoot)) {
+          this._defaultJurisdiction = firstRoot;
+        }
       }
     }
-    _jurFromFilename(file) {
-      const m = file.match(/^juris-us\+(.+)-IndigoTemp\.csl$/);
-      if (m) return "us:" + m[1];
-      if (file === "juris-us-IndigoTemp.csl") return "us";
-      return null;
+    _parseModuleFilename(file) {
+      const stem = String(file || "").replace(/\.csl$/i, "");
+      if (!stem.toLowerCase().startsWith("juris-")) return null;
+      const body = stem.slice(6);
+      if (!body) return null;
+      const dashIdx = body.indexOf("-");
+      const jurisdictionPart = dashIdx === -1 ? body : body.slice(0, dashIdx);
+      const variantPart = dashIdx === -1 ? "" : body.slice(dashIdx + 1);
+      if (!jurisdictionPart) return null;
+      return {
+        fileName: file,
+        id: stem,
+        jurisdiction: jurisdictionPart.toLowerCase().replace(/\+/g, ":"),
+        variant: variantPart.toLowerCase()
+      };
+    }
+    _hasModuleForJurisdiction(jurisdiction) {
+      return this._byJur.has(String(jurisdiction || "").toLowerCase());
     }
     hasJurisdiction(jur) {
-      return this._byJur.has((jur || "").toLowerCase());
+      return this._hasModuleForJurisdiction(jur);
+    }
+    _normalizeVariantName(variantName) {
+      return String(variantName || "").trim().toLowerCase();
+    }
+    _getJurisdictionVariantMap(jurisdiction) {
+      return this._byJur.get(String(jurisdiction || "").toLowerCase()) || null;
+    }
+    _getModuleForJurisdiction(jurisdiction, variantName = "") {
+      const byVariant = this._getJurisdictionVariantMap(jurisdiction);
+      if (!byVariant) return null;
+      const variant = this._normalizeVariantName(variantName);
+      if (variant && byVariant.has(variant)) {
+        return byVariant.get(variant);
+      }
+      if (byVariant.has("")) {
+        return byVariant.get("");
+      }
+      if (!variant && byVariant.size) {
+        return byVariant.values().next().value || null;
+      }
+      return null;
     }
     loadJurisdictionStyleSync(jurisdiction, variantName = "IndigoTemp") {
-      const variant = variantName || "IndigoTemp";
-      if (variant !== "IndigoTemp") return null;
-      let jur = (jurisdiction || "us").toLowerCase();
-      if (Jurisdiction.isCircuit(jur)) return this._byJur.get("us") || null;
-      for (const j of Jurisdiction.trimChain(jur)) {
-        if (this._byJur.has(j)) return this._byJur.get(j);
+      const variant = this._normalizeVariantName(variantName);
+      const jur = String(jurisdiction || this._defaultJurisdiction || "us").trim().toLowerCase() || "us";
+      const chain = Jurisdiction.trimChain(jur);
+      if (variant) {
+        for (const j of chain) {
+          const byVariant = this._getJurisdictionVariantMap(j);
+          if (byVariant?.has(variant)) {
+            return byVariant.get(variant);
+          }
+        }
       }
-      return this._byJur.get("us") || null;
+      for (const j of chain) {
+        const xml = this._getModuleForJurisdiction(j, "");
+        if (xml) return xml;
+      }
+      return this._getModuleForJurisdiction(this._defaultJurisdiction, variant) || null;
     }
   };
 
+  // lib/services/locale.mjs
+  function getLocaleCandidates(rawLocale) {
+    const locale = String(rawLocale || "").trim().replace(/_/g, "-");
+    if (!locale) {
+      return ["us"];
+    }
+    const parts = locale.split("-").filter(Boolean);
+    const candidates = [];
+    const push = (value) => {
+      const code = String(value || "").trim().toLowerCase();
+      if (code && !candidates.includes(code)) {
+        candidates.push(code);
+      }
+    };
+    push(parts.join("-"));
+    if (parts.length >= 2) {
+      push(`${parts[1]}-${parts[0]}`);
+    }
+    for (let index = 1; index < parts.length; index += 1) {
+      const part = parts[index];
+      if (/^[A-Za-z]{2}$/.test(part) || /^\d{3}$/.test(part)) {
+        push(part);
+        break;
+      }
+    }
+    push(parts[0]);
+    push("us");
+    return candidates;
+  }
+  function filePrefixMatches(fileName, prefix) {
+    const file = String(fileName || "").toLowerCase();
+    const stem = String(prefix || "").toLowerCase();
+    const fileStem = file.replace(/\.[^.]+$/, "");
+    return fileStem === stem || fileStem.startsWith(`${stem}-`) || fileStem.startsWith(`${stem}+`);
+  }
+  function selectLocaleFiles(fileNames, prefix, rawLocale, extension) {
+    const files = Array.isArray(fileNames) ? fileNames.slice() : [];
+    const normalizedExtension = String(extension || "").trim().toLowerCase();
+    const candidates = getLocaleCandidates(rawLocale);
+    const matchingFiles = (candidate) => {
+      const lowerCandidate = String(candidate || "").trim().toLowerCase();
+      const exactName = normalizedExtension ? `${prefix}-${lowerCandidate}${normalizedExtension}` : `${prefix}-${lowerCandidate}`;
+      const exact = [];
+      const variants = [];
+      for (const file of files) {
+        const lower = String(file || "").toLowerCase();
+        if (normalizedExtension && !lower.endsWith(normalizedExtension)) continue;
+        if (!filePrefixMatches(lower, `${prefix}-${lowerCandidate}`)) continue;
+        if (lower === exactName) {
+          exact.push(file);
+        } else {
+          variants.push(file);
+        }
+      }
+      exact.sort((a, b) => a.localeCompare(b));
+      variants.sort((a, b) => a.localeCompare(b));
+      return exact.concat(variants);
+    };
+    for (const candidate of candidates) {
+      const matches = matchingFiles(candidate);
+      if (matches.length) {
+        return matches;
+      }
+    }
+    return [];
+  }
+
   // lib/services/abbrevService.mjs
   var AbbrevService = class {
-    constructor({ dataStore }) {
+    constructor({ dataStore, locale }) {
       this.dataStore = dataStore;
+      this.locale = locale;
+      this._localeCandidates = getLocaleCandidates(locale);
+      this._autoDatasets = /* @__PURE__ */ new Map();
+      this._autoDatasetsByRoot = /* @__PURE__ */ new Map();
+      this._autoDomainsByRoot = /* @__PURE__ */ new Map();
+      this._primaryDatasets = /* @__PURE__ */ new Map();
+      this._primaryDatasetsByRoot = /* @__PURE__ */ new Map();
+      this._mapDatasets = /* @__PURE__ */ new Map();
+      this._mapDatasetsByRoot = /* @__PURE__ */ new Map();
+      this._defaultAutoDataset = null;
+      this._defaultPrimaryDataset = null;
+      this._defaultMapDataset = null;
       this._autoUS = null;
       this._primaryUS = null;
       this._secondaryDatasets = {};
-      this._secondaryDatasetOrder = ["secondary-us-bluebook", "secondary-science"];
+      this._secondaryDatasetOrder = [];
+      this._secondaryDatasetMeta = /* @__PURE__ */ new Map();
       this._defaultSecondaryDataset = "secondary-us-bluebook";
       this._jurisUSMap = null;
       this._primaryJur = null;
+      this._defaultJurisdiction = "us";
       this._userSecondaryOverrides = {};
       this._secondaryOverridesPref = "extensions.indigobook-cslm.secondaryContainerTitleOverrides";
       this._userJurisdictionOverrides = {};
       this._jurisdictionOverridesPref = "extensions.indigobook-cslm.jurisdictionOverrides";
     }
     async preload() {
-      this._autoUS = await this.dataStore.loadJSON("data/auto-us.json");
-      this._primaryUS = await this.dataStore.loadJSON("data/primary-us.json");
-      this._secondaryDatasets = {
-        "secondary-us-bluebook": await this.dataStore.loadJSON("data/secondary-us-bluebook.json"),
-        "secondary-science": await this.dataStore.loadJSON("data/secondary-science.json").catch(() => null)
-      };
-      this._jurisUSMap = await this.dataStore.loadJSON("data/juris-us-map.json");
-      this._primaryJur = await this.dataStore.loadJSON("data/primary-jurisdictions.json");
+      const listing = await this.dataStore.loadJSON("juris-abbrevs/DIRECTORY_LISTING.json");
+      const listingEntries = Array.isArray(listing) ? listing : [];
+      const listingFiles = this._expandListingFiles(listingEntries);
+      const fileNames = listingFiles.map((item) => item.filename);
+      const fileMetaByName = new Map(listingFiles.map((item) => [item.filename, item.name]));
+      const mapListing = await this.dataStore.loadJSONAny(["juris-maps/DIRECTORY_LISTING.json"]);
+      const mapListingEntries = Array.isArray(mapListing) ? mapListing : [];
+      const mapFileMetaByName = new Map(
+        mapListingEntries.map((item) => [String(item?.filename || "").trim(), String(item?.name || "").trim()]).filter(([filename]) => Boolean(filename))
+      );
+      const autoFiles = fileNames.filter((file) => /^auto-.*\.json$/i.test(file));
+      this._autoDatasets = await this._loadDatasetGroup("juris-abbrevs", autoFiles, fileMetaByName);
+      this._autoDatasetsByRoot = this._groupDatasetsByRoot(this._autoDatasets);
+      this._autoDomainsByRoot = this._groupDatasetDomainsByRoot(this._autoDatasets);
+      this._defaultAutoDataset = this._pickLocaleDataset(Array.from(this._autoDatasets.keys()), "auto") || null;
+      this._autoUS = this._defaultAutoDataset ? this._autoDatasets.get(this._defaultAutoDataset)?.data || null : null;
+      this._defaultJurisdiction = this._jurisdictionRootFromFilename(this._defaultAutoDataset) || this._defaultJurisdiction;
+      const primaryFiles = fileNames.filter((file) => /^primary-.*\.json$/i.test(file));
+      this._primaryDatasets = await this._loadDatasetGroup("juris-abbrevs", primaryFiles, fileMetaByName);
+      this._primaryDatasetsByRoot = this._groupDatasetsByRoot(this._primaryDatasets);
+      this._defaultPrimaryDataset = this._primaryDatasets.has("primary-us") ? "primary-us" : Array.from(this._primaryDatasets.keys())[0] || null;
+      this._primaryUS = this._defaultPrimaryDataset ? this._primaryDatasets.get(this._defaultPrimaryDataset)?.data || null : null;
+      const mapFiles = Array.from(/* @__PURE__ */ new Set([
+        ...mapListingEntries.map((item) => String(item?.filename || "").trim()).filter((file) => /^juris-.*-map\.json$/i.test(file)),
+        ...fileNames.filter((file) => /^juris-.*-map\.json$/i.test(file))
+      ])).sort((a, b) => a.localeCompare(b));
+      this._mapDatasets = await this._loadDatasetGroup("juris-maps", mapFiles, mapFileMetaByName);
+      this._mapDatasetsByRoot = this._groupDatasetsByRoot(this._mapDatasets);
+      this._defaultMapDataset = this._mapDatasets.has("juris-us-map") ? "juris-us-map" : Array.from(this._mapDatasets.keys())[0] || null;
+      this._jurisUSMap = this._defaultMapDataset ? this._mapDatasets.get(this._defaultMapDataset)?.data || null : null;
+      const secondaryFiles = fileNames.filter((file) => /^secondary-.*\.json$/i.test(file));
+      this._secondaryDatasetMeta = new Map(
+        secondaryFiles.map((file) => {
+          const dataset = this._datasetNameFromFilename(file);
+          return [dataset, {
+            filename: file,
+            name: fileMetaByName.get(file) || dataset
+          }];
+        })
+      );
+      this._secondaryDatasets = {};
+      for (const file of secondaryFiles) {
+        const dataset = this._datasetNameFromFilename(file);
+        this._secondaryDatasets[dataset] = await this.dataStore.loadJSON(`juris-abbrevs/${file}`);
+      }
+      this._secondaryDatasetOrder = this._buildSecondaryDatasetOrder(Object.keys(this._secondaryDatasets));
+      this._defaultSecondaryDataset = this._secondaryDatasetOrder.find((dataset) => this._secondaryDatasets?.[dataset]) || this._secondaryDatasetOrder[0] || "secondary-us-bluebook";
+      this._primaryJur = await this.dataStore.loadJSONAny(["juris-maps/primary-jurisdictions.json", "data/primary-jurisdictions.json"]);
       this._userSecondaryOverrides = this._loadSecondaryOverrides();
       this._userJurisdictionOverrides = this._loadJurisdictionOverrides();
+    }
+    _buildLocalePathCandidates(basePath, suffix) {
+      const candidates = [];
+      const seen = /* @__PURE__ */ new Set();
+      for (const candidate of this._localeCandidates) {
+        const path = `${basePath}-${candidate}${suffix}`;
+        if (seen.has(path)) continue;
+        seen.add(path);
+        candidates.push(path);
+      }
+      return candidates;
+    }
+    _expandListingFiles(listingEntries = []) {
+      const rows = [];
+      const seen = /* @__PURE__ */ new Set();
+      for (const item of Array.isArray(listingEntries) ? listingEntries : []) {
+        const filename = String(item?.filename || "").trim();
+        const name = String(item?.name || "").trim();
+        if (filename && !seen.has(filename)) {
+          seen.add(filename);
+          rows.push({ filename, name });
+        }
+        const variants = item?.variants;
+        if (!variants || typeof variants !== "object" || Array.isArray(variants) || !filename) continue;
+        for (const variantName of Object.keys(variants)) {
+          const variant = String(variantName || "").trim();
+          if (!variant) continue;
+          const variantFile = filename.replace(/\.json$/i, `-${variant}.json`);
+          if (!variantFile || seen.has(variantFile)) continue;
+          seen.add(variantFile);
+          rows.push({ filename: variantFile, name });
+        }
+      }
+      return rows;
+    }
+    async _loadDatasetGroup(rootDir, fileNames, metaByFileName = /* @__PURE__ */ new Map()) {
+      const datasets = /* @__PURE__ */ new Map();
+      const files = Array.isArray(fileNames) ? fileNames.slice().sort((a, b) => a.localeCompare(b)) : [];
+      for (const file of files) {
+        const dataset = this._datasetNameFromFilename(file);
+        const data = await this.dataStore.loadJSON(`${rootDir}/${file}`);
+        datasets.set(dataset, {
+          dataset,
+          fileName: file,
+          root: this._jurisdictionRootFromFilename(file),
+          domain: this._datasetDomainFromFilename(file),
+          domainKey: this._normalizeDatasetDomain(this._datasetDomainFromFilename(file)),
+          name: String(metaByFileName.get(file) || this._inferDatasetDisplayName(dataset, data)).trim(),
+          data
+        });
+      }
+      return datasets;
+    }
+    _inferDatasetDisplayName(dataset, data) {
+      const explicitName = String(data?.name || "").trim();
+      if (explicitName) return explicitName;
+      const localizedJurisdictions = this._getLocalizedMapJurisdictions(data);
+      if (Array.isArray(localizedJurisdictions)) {
+        for (const item of localizedJurisdictions) {
+          if (!Array.isArray(item) || item.length < 2) continue;
+          const label = String(item[1] || "").trim();
+          if (label) return label;
+        }
+      }
+      return this._formatDatasetLabel(dataset);
+    }
+    _getLocalizedMapJurisdictions(mapData) {
+      const jurisdictions = mapData?.jurisdictions;
+      if (!jurisdictions || typeof jurisdictions !== "object" || Array.isArray(jurisdictions)) return null;
+      for (const candidate of this._localeCandidates || []) {
+        const rows = jurisdictions?.[candidate];
+        if (Array.isArray(rows) && rows.length) return rows;
+      }
+      return Array.isArray(jurisdictions?.default) ? jurisdictions.default : null;
+    }
+    _groupDatasetsByRoot(datasets) {
+      const byRoot = /* @__PURE__ */ new Map();
+      for (const info of datasets?.values?.() || []) {
+        const root = String(info?.root || "").trim().toLowerCase();
+        if (!root) continue;
+        if (!byRoot.has(root)) byRoot.set(root, []);
+        byRoot.get(root).push(info);
+      }
+      for (const infos of byRoot.values()) {
+        infos.sort((a, b) => String(a.fileName || "").localeCompare(String(b.fileName || "")));
+      }
+      return byRoot;
+    }
+    _groupDatasetDomainsByRoot(datasets) {
+      const byRoot = /* @__PURE__ */ new Map();
+      for (const info of datasets?.values?.() || []) {
+        const root = String(info?.root || "").trim().toLowerCase();
+        const domain = String(info?.domain || "").trim();
+        const domainKey = this._normalizeDatasetDomain(domain);
+        if (!root || !domain || !domainKey) continue;
+        if (!byRoot.has(root)) byRoot.set(root, []);
+        const entries = byRoot.get(root);
+        if (!entries.some((entry) => this._normalizeDatasetDomain(entry) === domainKey)) {
+          entries.push(domain);
+        }
+      }
+      for (const entries of byRoot.values()) {
+        entries.sort((a, b) => a.localeCompare(b));
+      }
+      return byRoot;
+    }
+    _pickLocaleDataset(datasetNames, prefix) {
+      const names = Array.isArray(datasetNames) ? datasetNames.slice() : [];
+      if (!names.length) return null;
+      const exactCandidates = selectLocaleFiles(names.map((name) => `${name}.json`), prefix, this.locale, ".json").map((file) => this._datasetNameFromFilename(file));
+      if (exactCandidates.length) {
+        return exactCandidates[0];
+      }
+      const exactPrefix = `${prefix}-`;
+      const lowerLocale = this._localeCandidates[0] || "";
+      for (const name of names) {
+        if (name.toLowerCase() === `${prefix}-${lowerLocale}`.toLowerCase()) return name;
+        if (name.toLowerCase().startsWith(exactPrefix)) return name;
+      }
+      return names[0];
+    }
+    _buildSecondaryDatasetOrder(loadedDatasets = []) {
+      const core = ["secondary-us-bluebook", "secondary-science"];
+      const loaded = Array.isArray(loadedDatasets) ? loadedDatasets : [];
+      const names = [];
+      for (const dataset of core) {
+        if (loaded.includes(dataset) && !names.includes(dataset)) names.push(dataset);
+      }
+      for (const dataset of loaded.slice().sort((a, b) => a.localeCompare(b))) {
+        if (!names.includes(dataset)) names.push(dataset);
+      }
+      return names;
+    }
+    _datasetNameFromFilename(fileName) {
+      return String(fileName || "").trim().replace(/\.json$/i, "");
+    }
+    _datasetBodyFromFilename(fileName) {
+      return this._datasetNameFromFilename(fileName).replace(/^auto-/i, "").replace(/^primary-/i, "").replace(/^secondary-/i, "").replace(/^juris-/i, "").replace(/-map$/i, "");
+    }
+    _jurisdictionRootFromFilename(fileName) {
+      const body = this._datasetBodyFromFilename(fileName);
+      const root = body.split("-")[0];
+      return root ? root.toLowerCase().replace(/\+/g, ":") : null;
+    }
+    _datasetDomainFromFilename(fileName) {
+      const body = this._datasetBodyFromFilename(fileName);
+      const dashIdx = body.indexOf("-");
+      if (dashIdx === -1) return null;
+      const domain = body.slice(dashIdx + 1).trim();
+      return domain || null;
+    }
+    _normalizeDatasetDomain(rawDomain) {
+      return String(rawDomain || "").trim().toLowerCase() || null;
+    }
+    _splitJurisdictionDomain(rawJurisdiction) {
+      const input = String(rawJurisdiction || "").trim();
+      const atIdx = input.indexOf("@");
+      const jurisdiction = (atIdx === -1 ? input : input.slice(0, atIdx)).trim().toLowerCase();
+      const domain = atIdx === -1 ? "" : input.slice(atIdx + 1).trim();
+      return {
+        jurisdiction,
+        domain,
+        domainKey: this._normalizeDatasetDomain(domain)
+      };
+    }
+    _jurisdictionRoot(rawJurisdiction) {
+      const jurisdiction = this._splitJurisdictionDomain(rawJurisdiction).jurisdiction;
+      if (!jurisdiction || jurisdiction === "default") {
+        return this._defaultJurisdiction || "us";
+      }
+      return jurisdiction.split(":")[0] || (this._defaultJurisdiction || "us");
+    }
+    _jurisdictionMapCode(rawJurisdiction) {
+      const jurisdiction = this._splitJurisdictionDomain(rawJurisdiction).jurisdiction;
+      if (!jurisdiction || jurisdiction === "default") {
+        return this._defaultJurisdiction || "us";
+      }
+      const parts = jurisdiction.split(":").filter(Boolean);
+      return parts[parts.length - 1] || (this._defaultJurisdiction || "us");
+    }
+    _pickDatasetInfoForRoot(byRoot, root, fallbackDatasetName = null, preferredDomain = null) {
+      const normalizedRoot = String(root || "").trim().toLowerCase();
+      if (!normalizedRoot) return null;
+      const entries = byRoot?.get?.(normalizedRoot) || [];
+      if (Array.isArray(entries) && entries.length) {
+        const normalizedDomain = this._normalizeDatasetDomain(preferredDomain);
+        if (normalizedDomain) {
+          const exactDomain = entries.find((entry) => this._normalizeDatasetDomain(entry?.domain) === normalizedDomain);
+          if (exactDomain) return exactDomain;
+        }
+        const fallback = String(fallbackDatasetName || "").trim().toLowerCase();
+        if (fallback.startsWith("juris-") && fallback.endsWith("-map")) {
+          const exactMap = entries.find((entry) => String(entry.dataset || "").toLowerCase() === `juris-${normalizedRoot}-map`);
+          if (exactMap) return exactMap;
+        } else if (fallback.startsWith("primary-")) {
+          const exactPrimary = entries.find((entry) => String(entry.dataset || "").toLowerCase() === `primary-${normalizedRoot}`);
+          if (exactPrimary) return exactPrimary;
+        } else if (fallback.startsWith("auto-")) {
+          const exactAuto = entries.find((entry) => String(entry.dataset || "").toLowerCase() === `auto-${normalizedRoot}`);
+          if (exactAuto) return exactAuto;
+        }
+        return entries[0];
+      }
+      if (fallbackDatasetName) {
+        for (const group of byRoot?.values?.() || []) {
+          const match = group.find((entry) => entry.dataset === fallbackDatasetName);
+          if (match) return match;
+        }
+      }
+      return null;
+    }
+    _normalizeJurisdictionDatasetName(rawDataset) {
+      const dataset = String(rawDataset || "").trim();
+      if (!dataset) return this._defaultAutoDataset || "auto-us";
+      return dataset.replace(/^jurisdiction:/i, "");
+    }
+    _getJurisdictionDatasetInfo(rawDataset) {
+      const dataset = this._normalizeJurisdictionDatasetName(rawDataset);
+      if (this._autoDatasets.has(dataset)) {
+        return { kind: "auto", ...this._autoDatasets.get(dataset) };
+      }
+      if (this._primaryDatasets.has(dataset)) {
+        return { kind: "primary", ...this._primaryDatasets.get(dataset) };
+      }
+      if (this._mapDatasets.has(dataset)) {
+        return { kind: "map", ...this._mapDatasets.get(dataset) };
+      }
+      return null;
+    }
+    _getJurisdictionOverrideBucket(rawDataset) {
+      const dataset = this._normalizeJurisdictionDatasetName(rawDataset);
+      if (!dataset) return {};
+      const bucket = this._userJurisdictionOverrides?.[dataset];
+      return bucket && typeof bucket === "object" && !Array.isArray(bucket) ? bucket : {};
+    }
+    _getAutoDatasetInfoForJurisdiction(rawJurisdiction) {
+      const parsed = this._splitJurisdictionDomain(rawJurisdiction);
+      const root = this._jurisdictionRoot(parsed.jurisdiction);
+      return this._pickDatasetInfoForRoot(this._autoDatasetsByRoot, root, this._defaultAutoDataset, parsed.domain);
+    }
+    _getPrimaryDatasetInfoForJurisdiction(rawJurisdiction) {
+      const root = this._jurisdictionRoot(rawJurisdiction);
+      return this._pickDatasetInfoForRoot(this._primaryDatasetsByRoot, root, this._defaultPrimaryDataset);
+    }
+    _getMapDatasetInfoForJurisdiction(rawJurisdiction) {
+      const root = this._jurisdictionRoot(rawJurisdiction);
+      return this._pickDatasetInfoForRoot(this._mapDatasetsByRoot, root, this._defaultMapDataset);
+    }
+    getAvailableAbbrevDomains() {
+      const out = {};
+      for (const [root, infos] of this._autoDatasetsByRoot.entries()) {
+        if (!Array.isArray(infos) || !infos.length) continue;
+        const domains = this._autoDomainsByRoot.get(root);
+        out[root] = Array.isArray(domains) ? domains.slice() : [];
+      }
+      return out;
     }
     normalizeKey(s) {
       return (s || "").toString().trim().toLowerCase().replace(/[“”]/g, '"').replace(/[’]/g, "'").replace(/[^a-z0-9\s\.-]/g, " ").replace(/\s+/g, " ").trim();
@@ -443,7 +979,14 @@ ${mlzBlock}` : mlzBlock;
       return { value: m[2], directive: m[1] };
     }
     lookupForCiteProc(category, key, jur, options = {}) {
-      const preferredJur = (jur || "default").toLowerCase();
+      const parsedJurisdiction = this._splitJurisdictionDomain(jur || this._defaultJurisdiction || "default");
+      const preferredJur = parsedJurisdiction.jurisdiction || (this._defaultJurisdiction || "default");
+      const effectiveJur = preferredJur === "default" ? this._defaultJurisdiction || "us" : preferredJur;
+      const preferredJurWithDomain = parsedJurisdiction.domain ? `${effectiveJur}@${parsedJurisdiction.domain}` : effectiveJur;
+      const autoInfo = this._getAutoDatasetInfoForJurisdiction(preferredJurWithDomain) || this._getAutoDatasetInfoForJurisdiction(effectiveJur) || this._getJurisdictionDatasetInfo(this._defaultAutoDataset) || { kind: "auto", dataset: this._defaultAutoDataset || "auto-us", data: this._autoUS };
+      const primaryData = this._primaryUS?.xdata || null;
+      const primaryOverrides = this._getJurisdictionOverrideBucket(this._defaultPrimaryDataset);
+      const autoOverrides = this._getJurisdictionOverrideBucket(autoInfo?.dataset);
       const noHints = !!options.noHints;
       const normalizedKey = this.normalizeKey(key);
       const normalizedKeyNoDots = normalizedKey.replace(/\./g, " ").replace(/\s+/g, " ").trim();
@@ -452,58 +995,53 @@ ${mlzBlock}` : mlzBlock;
         containerTitleKeys.push(normalizedKeyNoDots);
       }
       let hit = null;
-      if (category === "institution-part") {
-        hit = lookupJurChainWithOverrides(
-          this._autoUS?.xdata,
-          this._userJurisdictionOverrides?.["auto-us"],
-          preferredJur === "default" ? "us" : preferredJur,
-          "institution-part",
-          key
-        ) || lookupJurChainWithOverrides(
-          this._autoUS?.xdata,
-          this._userJurisdictionOverrides?.["auto-us"],
-          preferredJur === "default" ? "us" : preferredJur,
-          "institution-part",
-          normalizedKey
+      if (category === "institution-part" || category === "institution-entire") {
+        hit = this._lookupInstitutionCategoryValue(
+          category,
+          key,
+          normalizedKey,
+          effectiveJur,
+          autoInfo?.data?.xdata,
+          autoOverrides
         );
-        if (hit?.value) return { jurisdiction: hit.jurisdiction, value: hit.value };
+        if (hit?.value) return { jurisdiction: preferredJurWithDomain, value: hit.value };
         return null;
       }
       if (category === "place") {
-        const upper = (preferredJur === "default" ? "us" : preferredJur).toUpperCase();
-        const value = this._lookupAutoUSPlaceOverride(upper) || this._primaryJur?.xdata?.default?.place?.[upper] || this._autoUS?.xdata?.default?.place?.[upper] || null;
-        return value ? { jurisdiction: "default", value } : null;
+        const upper = effectiveJur.toUpperCase();
+        const value = this._lookupAutoUSPlaceOverride(upper, autoInfo?.dataset) || this._primaryJur?.xdata?.default?.place?.[upper] || autoInfo?.data?.xdata?.default?.place?.[upper] || null;
+        return value ? { jurisdiction: preferredJurWithDomain, value } : null;
       }
       if (category === "container-title") {
         for (const containerTitleKey of containerTitleKeys) {
           hit = lookupJurChainWithOverrides(
-            this._primaryUS?.xdata,
-            this._userJurisdictionOverrides?.["primary-us"],
-            preferredJur === "default" ? "us" : preferredJur,
+            primaryData,
+            primaryOverrides,
+            effectiveJur,
             "container-title",
             containerTitleKey
           );
-          if (hit?.value) return { jurisdiction: hit.jurisdiction || preferredJur, value: hit.value };
+          if (hit?.value) return { jurisdiction: preferredJurWithDomain, value: hit.value };
           const secondaryValue = this._lookupSecondaryContainerTitle(containerTitleKey);
           if (secondaryValue) return { jurisdiction: "default", value: secondaryValue };
         }
         if (!noHints) {
           const fallback = this.abbreviateContainerTitleFallback(key, preferredJur);
-          if (fallback) return { jurisdiction: preferredJur === "default" ? "default" : preferredJur, value: fallback };
+          if (fallback) return { jurisdiction: preferredJur === "default" ? "default" : preferredJurWithDomain, value: fallback };
         }
       }
       if (category === "title") {
         hit = lookupJurChainWithOverrides(
-          this._primaryUS?.xdata,
-          this._userJurisdictionOverrides?.["primary-us"],
-          preferredJur === "default" ? "us" : preferredJur,
+          primaryData,
+          primaryOverrides,
+          effectiveJur,
           "title",
           normalizedKey
         );
-        if (hit?.value) return { jurisdiction: hit.jurisdiction || preferredJur, value: hit.value };
+        if (hit?.value) return { jurisdiction: preferredJurWithDomain, value: hit.value };
         if (!noHints) {
           const fallback = this.abbreviateTitleFallback(key, preferredJur);
-          if (fallback) return { jurisdiction: preferredJur === "default" ? "default" : preferredJur, value: fallback };
+          if (fallback) return { jurisdiction: preferredJur === "default" ? "default" : preferredJurWithDomain, value: fallback };
         }
       }
       return null;
@@ -512,9 +1050,9 @@ ${mlzBlock}` : mlzBlock;
       return this.lookupForCiteProc(listname, key, jur)?.value || null;
     }
     listAutoUSPlaceJurisdictions() {
-      const place = this._autoUS?.xdata?.default?.place || {};
+      const place = this._getAutoDatasetInfoForJurisdiction(this._defaultJurisdiction)?.data?.xdata?.default?.place || this._autoUS?.xdata?.default?.place || {};
       const keys = new Set(Object.keys(place));
-      for (const key of this._listAutoUSPlaceOverrideKeys()) {
+      for (const key of this._listAutoUSPlaceOverrideKeys(this._defaultAutoDataset)) {
         keys.add(key);
       }
       return Array.from(keys).map((key) => {
@@ -525,26 +1063,101 @@ ${mlzBlock}` : mlzBlock;
         };
       }).sort((a, b) => a.label.localeCompare(b.label) || a.code.localeCompare(b.code));
     }
+    listJurisdictionMenuOptions() {
+      const rows = [];
+      const seen = /* @__PURE__ */ new Set();
+      for (const info of this._autoDatasets.values()) {
+        const place = info?.data?.xdata?.default?.place;
+        if (!place || typeof place !== "object" || Array.isArray(place)) continue;
+        for (const [rawCode, rawLabel] of Object.entries(place)) {
+          const code = String(rawCode || "").trim().toLowerCase().replace(/\+/g, ":");
+          if (!code || seen.has(code)) continue;
+          seen.add(code);
+          const display = this.formatJurisdictionDisplay(code) || String(rawLabel || "").trim() || code;
+          const parts = this._buildJurisdictionDisplayParts(code, info);
+          rows.push({
+            code,
+            label: display,
+            root: parts?.root || code.split(":")[0] || code,
+            rootLabel: parts?.rootLabel || display,
+            depth: parts?.depth || code.split(":").filter(Boolean).length
+          });
+        }
+      }
+      return rows.sort((a, b) => {
+        return a.rootLabel.localeCompare(b.rootLabel) || a.root.localeCompare(b.root) || a.depth - b.depth || a.label.localeCompare(b.label) || a.code.localeCompare(b.code);
+      });
+    }
+    listCourtOptionsForJurisdiction(rawJurisdiction) {
+      const mapInfo = this._getMapDatasetInfoForJurisdiction(rawJurisdiction) || { data: this._jurisUSMap };
+      const mapData = mapInfo?.data || null;
+      const mapJurisdiction = this._jurisdictionMapCode(rawJurisdiction);
+      const selectionJurisdiction = String(rawJurisdiction || this._defaultJurisdiction || "us").trim().toLowerCase();
+      const jurisdictions = this._getLocalizedMapJurisdictions(mapData);
+      const courts = Array.isArray(mapData?.courts) ? mapData.courts : [];
+      const row = Array.isArray(jurisdictions) ? jurisdictions.find((item) => Array.isArray(item) && String(item[0] || "").trim().toLowerCase() === mapJurisdiction) : null;
+      if (!row || !courts.length) {
+        return this.listInstitutionPartOptionsForJurisdictionTree(rawJurisdiction);
+      }
+      const rows = [];
+      const seen = /* @__PURE__ */ new Set();
+      for (const ref of row.slice(2)) {
+        const index = Number(ref);
+        if (!Number.isFinite(index) || index < 0 || index >= courts.length) continue;
+        const court = courts[index];
+        if (!Array.isArray(court) || court.length < 2) continue;
+        const key = this.normalizeKey(court[0]);
+        const label = String(court[1] ?? "").trim();
+        if (!key || !label || seen.has(key)) continue;
+        seen.add(key);
+        rows.push({
+          key,
+          label,
+          abbreviation: court[0] || "",
+          jurisdiction: selectionJurisdiction,
+          isChild: false
+        });
+      }
+      return rows.sort((a, b) => a.label.localeCompare(b.label) || a.key.localeCompare(b.key));
+    }
     formatJurisdictionDisplay(rawJurisdiction) {
       const jurisdiction = (rawJurisdiction || "").toString().trim().toLowerCase();
       if (!jurisdiction) return "";
+      const parts = this._buildJurisdictionDisplayParts(jurisdiction);
+      if (!parts?.labels?.length) return "";
+      return parts.labels.join("|");
+    }
+    _buildJurisdictionDisplayParts(rawJurisdiction, rawAutoInfo = null) {
+      const jurisdiction = (rawJurisdiction || "").toString().trim().toLowerCase();
+      if (!jurisdiction) return null;
       const parts = jurisdiction.split(":").filter(Boolean);
-      if (!parts.length) return "";
-      if (parts[0] !== "us") return jurisdiction;
-      const labels = [String(this._autoUS?.name || "United States").trim(), "US"];
-      let chain = "us";
+      if (!parts.length) return null;
+      const autoInfo = rawAutoInfo || this._getAutoDatasetInfoForJurisdiction(jurisdiction) || { data: this._autoUS };
+      const rootCode = parts[0].toLowerCase();
+      const rootLabel = String(
+        autoInfo?.data?.name || this._lookupJurisdictionPlaceLabel(rootCode, autoInfo) || parts[0]
+      ).trim();
+      const labels = [rootLabel || parts[0].toUpperCase()];
+      let chain = rootCode;
       for (let index = 1; index < parts.length; index += 1) {
         chain = `${chain}:${parts[index]}`;
-        const label = this._lookupJurisdictionPlaceLabel(chain) || parts[index].toUpperCase();
+        const label = this._lookupJurisdictionPlaceLabel(chain, autoInfo) || parts[index].replace(/\./g, " ");
         labels.push(this._normalizeJurisdictionDisplayLabel(chain, label));
       }
-      return labels.join("|");
+      return {
+        code: jurisdiction,
+        root: rootCode,
+        rootLabel: labels[0],
+        labels,
+        depth: parts.length
+      };
     }
     listInstitutionPartOptionsForJurisdiction(rawJurisdiction) {
-      const jurisdiction = (rawJurisdiction || "us").toString().trim().toLowerCase() || "us";
-      const normalizedJurisdiction = jurisdiction === "default" ? "us" : jurisdiction;
+      const jurisdiction = (rawJurisdiction || this._defaultJurisdiction || "us").toString().trim().toLowerCase() || "us";
+      const normalizedJurisdiction = jurisdiction === "default" ? this._defaultJurisdiction || "us" : jurisdiction;
+      const autoInfo = this._getAutoDatasetInfoForJurisdiction(normalizedJurisdiction) || { data: this._autoUS };
       const rows = [];
-      const entries = this._listInstitutionPartEntriesForJurisdiction(normalizedJurisdiction);
+      const entries = this._listInstitutionPartEntriesForJurisdiction(normalizedJurisdiction, autoInfo);
       for (const [key, value] of entries.entries()) {
         rows.push({
           key,
@@ -557,10 +1170,11 @@ ${mlzBlock}` : mlzBlock;
       return rows.sort((a, b) => a.label.localeCompare(b.label) || a.key.localeCompare(b.key));
     }
     listInstitutionPartOptionsForJurisdictionTree(rawJurisdiction) {
-      const jurisdiction = (rawJurisdiction || "us").toString().trim().toLowerCase() || "us";
-      const normalizedJurisdiction = jurisdiction === "default" ? "us" : jurisdiction;
+      const jurisdiction = (rawJurisdiction || this._defaultJurisdiction || "us").toString().trim().toLowerCase() || "us";
+      const normalizedJurisdiction = jurisdiction === "default" ? this._defaultJurisdiction || "us" : jurisdiction;
+      const autoInfo = this._getAutoDatasetInfoForJurisdiction(normalizedJurisdiction) || { data: this._autoUS };
       const rows = [];
-      const exactEntries = this._listInstitutionPartEntriesForJurisdiction(normalizedJurisdiction);
+      const exactEntries = this._listInstitutionPartEntriesForJurisdiction(normalizedJurisdiction, autoInfo);
       for (const [key, value] of exactEntries.entries()) {
         rows.push({
           key,
@@ -572,17 +1186,17 @@ ${mlzBlock}` : mlzBlock;
       }
       const childPrefix = `${normalizedJurisdiction}:`;
       const childJurisdictions = /* @__PURE__ */ new Set();
-      for (const childJur of Object.keys(this._autoUS?.xdata || {})) {
+      for (const childJur of Object.keys(autoInfo?.data?.xdata || {})) {
         if (childJur.startsWith(childPrefix)) childJurisdictions.add(childJur);
       }
-      for (const parsed of this._listAutoUSInstitutionPartOverrideEntries()) {
+      for (const parsed of this._listAutoUSInstitutionOverrideEntries(autoInfo?.dataset)) {
         if (parsed.jurisdiction.startsWith(childPrefix)) childJurisdictions.add(parsed.jurisdiction);
       }
       for (const childJur of Array.from(childJurisdictions).sort()) {
         if (!childJur.startsWith(childPrefix)) continue;
-        const childEntries = this._listInstitutionPartEntriesForJurisdiction(childJur);
+        const childEntries = this._listInstitutionPartEntriesForJurisdiction(childJur, autoInfo);
         if (!childEntries.size) continue;
-        const placeLabel = this._lookupJurisdictionPlaceLabel(childJur) || childJur;
+        const placeLabel = this._lookupJurisdictionPlaceLabel(childJur, autoInfo) || childJur;
         for (const [key, value] of childEntries.entries()) {
           rows.push({
             key,
@@ -599,56 +1213,70 @@ ${mlzBlock}` : mlzBlock;
         return a.label.localeCompare(b.label) || a.key.localeCompare(b.key);
       });
     }
-    formatInstitutionPartDisplay(rawKey, rawJurisdiction = "us") {
+    formatInstitutionPartDisplay(rawKey, rawJurisdiction = this._defaultJurisdiction || "us") {
       const key = this.normalizeKey(rawKey);
       if (!key) return "";
-      const mapped = this._lookupCourtDisplayLabel(key);
+      const mapInfo = this._getMapDatasetInfoForJurisdiction(rawJurisdiction) || { data: this._jurisUSMap };
+      const mapped = this._lookupCourtDisplayLabel(key, mapInfo?.data);
       if (mapped) return mapped;
-      const lookupJurisdiction = (rawJurisdiction || "us").toString().trim().toLowerCase() || "us";
-      const hit = this.lookupForCiteProc("institution-part", key, lookupJurisdiction, { noHints: true });
-      const value = this.parseDirective(hit?.value).value;
-      if (value) return value;
+      const lookupJurisdiction = (rawJurisdiction || this._defaultJurisdiction || "us").toString().trim().toLowerCase() || "us";
+      for (const category of ["institution-part", "institution-entire"]) {
+        const hit = this.lookupForCiteProc(category, key, lookupJurisdiction, { noHints: true });
+        const value = this.parseDirective(hit?.value).value;
+        if (value) return value;
+      }
       return key.split(".").filter(Boolean).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
     }
-    _listInstitutionPartEntriesForJurisdiction(rawJurisdiction) {
+    _listInstitutionPartEntriesForJurisdiction(rawJurisdiction, autoInfo = null) {
       const jurisdiction = (rawJurisdiction || "us").toString().trim().toLowerCase();
       if (!jurisdiction) return /* @__PURE__ */ new Map();
       const entries = /* @__PURE__ */ new Map();
-      const baseEntries = this._autoUS?.xdata?.[jurisdiction]?.["institution-part"];
-      if (baseEntries && typeof baseEntries === "object" && !Array.isArray(baseEntries)) {
-        for (const [rawKey, rawValue] of Object.entries(baseEntries)) {
-          const key = this.normalizeKey(rawKey);
-          const value = String(rawValue ?? "").trim();
-          if (!key || !value) continue;
-          entries.set(key, value);
+      for (const category of ["institution-entire", "institution-part"]) {
+        const baseEntries = autoInfo?.data?.xdata?.[jurisdiction]?.[category];
+        if (baseEntries && typeof baseEntries === "object" && !Array.isArray(baseEntries)) {
+          for (const [rawKey, rawValue] of Object.entries(baseEntries)) {
+            const key = this.normalizeKey(rawKey);
+            const value = String(rawValue ?? "").trim();
+            if (!key || !value) continue;
+            entries.set(key, value);
+          }
         }
-      }
-      for (const parsed of this._listAutoUSInstitutionPartOverrideEntries()) {
-        if (parsed.jurisdiction !== jurisdiction) continue;
-        if (!parsed.key || !parsed.value) continue;
-        entries.set(parsed.key, parsed.value);
+        for (const parsed of this._listAutoUSInstitutionOverrideEntries(autoInfo?.dataset)) {
+          if (parsed.category !== category) continue;
+          if (parsed.jurisdiction !== jurisdiction) continue;
+          if (!parsed.key || !parsed.value) continue;
+          entries.set(parsed.key, parsed.value);
+        }
       }
       return entries;
     }
-    _listAutoUSInstitutionPartOverrideEntries() {
-      const bucket = this._userJurisdictionOverrides?.["auto-us"];
+    _listAutoUSInstitutionOverrideEntries(rawDataset = this._defaultAutoDataset) {
+      const bucket = this._getJurisdictionOverrideBucket(rawDataset);
       if (!bucket || typeof bucket !== "object" || Array.isArray(bucket)) return [];
+      const datasetRoot = this._jurisdictionRootFromFilename(rawDataset) || "us";
       const rows = [];
       for (const [overrideKey, overrideValue] of Object.entries(bucket)) {
         const parsed = this._parseJurisdictionDatasetOverrideKey(overrideKey);
         if (!parsed) continue;
-        if (parsed.category !== "institution-part") continue;
-        const jurisdiction = (parsed.jurisdiction || "").toString().trim().toLowerCase();
+        if (parsed.category !== "institution-part" && parsed.category !== "institution-entire") continue;
+        let jurisdiction = (parsed.jurisdiction || "").toString().trim().toLowerCase();
+        if (rawDataset && datasetRoot !== "us" && jurisdiction === "us") {
+          jurisdiction = datasetRoot;
+        }
         const key = this.normalizeKey(parsed.key);
         const value = String(overrideValue ?? "").trim();
         if (!jurisdiction || !key || !value) continue;
         rows.push({
           jurisdiction: jurisdiction === "default" ? "us" : jurisdiction,
           key,
-          value
+          value,
+          category: parsed.category
         });
       }
-      return rows;
+      return rows.sort((a, b) => {
+        const rank = (category) => category === "institution-part" ? 1 : 0;
+        return rank(a.category) - rank(b.category);
+      });
     }
     abbreviateContainerTitleFallback(title, jur) {
       return this._abbreviateByWords(title, jur, ["container-title"]);
@@ -729,11 +1357,14 @@ ${mlzBlock}` : mlzBlock;
       return this.parseDirective(hit.value).value;
     }
     _lookupFallbackPhrase(normalized, jur, categories) {
-      const normalizedJur = jur === "default" ? "us" : jur;
+      const normalizedJur = jur === "default" ? this._defaultJurisdiction || "us" : jur;
+      const autoInfo = this._getAutoDatasetInfoForJurisdiction(normalizedJur) || this._getJurisdictionDatasetInfo(this._defaultAutoDataset) || { data: this._autoUS };
+      const primaryData = this._primaryUS?.xdata || null;
+      const primaryOverrides = this._getJurisdictionOverrideBucket(this._defaultPrimaryDataset);
       for (const category of categories) {
         const primaryHit = lookupJurChainWithOverrides(
-          this._primaryUS?.xdata,
-          this._userJurisdictionOverrides?.["primary-us"],
+          primaryData,
+          primaryOverrides,
           normalizedJur,
           category,
           normalized
@@ -747,19 +1378,20 @@ ${mlzBlock}` : mlzBlock;
     _lookupJurisdictionPlaceLabel(rawJurisdiction) {
       const jurisdiction = (rawJurisdiction || "").toString().trim().toUpperCase();
       if (!jurisdiction) return null;
-      return this._lookupAutoUSPlaceOverride(jurisdiction) || this._primaryJur?.xdata?.default?.place?.[jurisdiction] || this._autoUS?.xdata?.default?.place?.[jurisdiction] || null;
+      const autoInfo = this._getAutoDatasetInfoForJurisdiction(jurisdiction) || this._getJurisdictionDatasetInfo(this._defaultAutoDataset) || { data: this._autoUS };
+      return this._lookupAutoUSPlaceOverride(jurisdiction, autoInfo?.dataset) || this._primaryJur?.xdata?.default?.place?.[jurisdiction] || autoInfo?.data?.xdata?.default?.place?.[jurisdiction] || null;
     }
-    _lookupAutoUSPlaceOverride(rawJurisdiction) {
+    _lookupAutoUSPlaceOverride(rawJurisdiction, rawDataset = this._defaultAutoDataset) {
       const jurisdiction = (rawJurisdiction || "").toString().trim().toUpperCase();
       if (!jurisdiction) return null;
       const overrideKey = this._makeJurisdictionDatasetOverrideKey("default", "place", jurisdiction);
       if (!overrideKey) return null;
-      const bucket = this._userJurisdictionOverrides?.["auto-us"];
+      const bucket = this._getJurisdictionOverrideBucket(rawDataset);
       if (!bucket || !Object.prototype.hasOwnProperty.call(bucket, overrideKey)) return null;
       return bucket[overrideKey] || null;
     }
-    _listAutoUSPlaceOverrideKeys() {
-      const bucket = this._userJurisdictionOverrides?.["auto-us"];
+    _listAutoUSPlaceOverrideKeys(rawDataset = this._defaultAutoDataset) {
+      const bucket = this._getJurisdictionOverrideBucket(rawDataset);
       if (!bucket || typeof bucket !== "object" || Array.isArray(bucket)) return [];
       const keys = [];
       for (const overrideKey of Object.keys(bucket)) {
@@ -770,10 +1402,10 @@ ${mlzBlock}` : mlzBlock;
       }
       return keys;
     }
-    _lookupCourtDisplayLabel(rawKey) {
+    _lookupCourtDisplayLabel(rawKey, mapData = this._jurisUSMap) {
       const key = this.normalizeKey(rawKey);
       if (!key) return null;
-      const courts = this._jurisUSMap?.courts;
+      const courts = mapData?.courts;
       if (!Array.isArray(courts)) return null;
       for (const item of courts) {
         if (!Array.isArray(item) || item.length < 2) continue;
@@ -784,7 +1416,6 @@ ${mlzBlock}` : mlzBlock;
       return null;
     }
     _normalizeJurisdictionDisplayLabel(jurisdiction, label) {
-      if ((jurisdiction || "").toLowerCase() === "us") return "US";
       return String(label || "").trim();
     }
     listSecondaryContainerTitleAbbreviations(rawDataset = this._defaultSecondaryDataset) {
@@ -797,6 +1428,74 @@ ${mlzBlock}` : mlzBlock;
         value: merged[key],
         source: Object.prototype.hasOwnProperty.call(user, key) ? "user" : "base"
       }));
+    }
+    listSecondaryDatasetOptions() {
+      const rows = [];
+      const seen = /* @__PURE__ */ new Set();
+      for (const dataset of this._getSecondaryLookupOrder()) {
+        if (!this._secondaryDatasets?.[dataset] || seen.has(dataset)) continue;
+        seen.add(dataset);
+        rows.push({
+          dataset,
+          label: this._secondaryDatasetMeta.get(dataset)?.name || this._formatDatasetLabel(dataset),
+          isDefault: dataset === this._defaultSecondaryDataset
+        });
+      }
+      for (const dataset of Object.keys(this._secondaryDatasets || {}).sort((a, b) => a.localeCompare(b))) {
+        if (seen.has(dataset)) continue;
+        seen.add(dataset);
+        rows.push({
+          dataset,
+          label: this._secondaryDatasetMeta.get(dataset)?.name || this._formatDatasetLabel(dataset),
+          isDefault: dataset === this._defaultSecondaryDataset
+        });
+      }
+      return rows;
+    }
+    listPrimaryDatasetOptions() {
+      const rows = [];
+      const seen = /* @__PURE__ */ new Set();
+      for (const info of this._primaryDatasets.values()) {
+        if (!info || seen.has(info.dataset)) continue;
+        seen.add(info.dataset);
+        rows.push({
+          dataset: info.dataset,
+          label: this._formatJurisdictionDatasetLabel({ ...info, kind: "primary" }),
+          isDefault: info.dataset === this._defaultPrimaryDataset
+        });
+      }
+      return rows;
+    }
+    listPrimaryAbbreviations(rawDataset = this._defaultPrimaryDataset) {
+      return this.listJurisdictionPreferenceEntries(rawDataset);
+    }
+    upsertPrimaryAbbreviation(rawDataset, rawJurisdiction, category, key, value) {
+      return this.upsertJurisdictionPreferenceEntry(rawDataset, rawJurisdiction, category, key, value);
+    }
+    removePrimaryAbbreviation(rawDataset, rawJurisdiction, category, key) {
+      return this.removeJurisdictionPreferenceEntry(rawDataset, rawJurisdiction, category, key);
+    }
+    resetPrimaryAbbreviations(rawDataset = this._defaultPrimaryDataset) {
+      this.resetJurisdictionPreferenceOverrides(rawDataset);
+    }
+    listJurisdictionDatasetOptions() {
+      const rows = [];
+      const seen = /* @__PURE__ */ new Set();
+      const pushInfo = (info) => {
+        if (!info || seen.has(info.dataset)) return;
+        seen.add(info.dataset);
+        rows.push({
+          value: `jurisdiction:${info.dataset}`,
+          label: this._formatJurisdictionDatasetLabel(info),
+          dataset: info.dataset,
+          kind: info.kind,
+          isDefault: info.dataset === this._defaultAutoDataset || info.dataset === this._defaultMapDataset
+        });
+      };
+      for (const info of this._autoDatasets.values()) pushInfo({ kind: "auto", ...info });
+      for (const info of this._primaryDatasets.values()) pushInfo({ kind: "primary", ...info });
+      for (const info of this._mapDatasets.values()) pushInfo({ kind: "map", ...info });
+      return rows;
     }
     upsertSecondaryContainerTitleAbbreviation(rawDataset, rawKey, rawValue) {
       const dataset = this._normalizeSecondaryDataset(rawDataset);
@@ -825,12 +1524,17 @@ ${mlzBlock}` : mlzBlock;
       this._userSecondaryOverrides[dataset] = {};
       this._saveSecondaryOverrides();
     }
-    listJurisdictionPreferenceEntries() {
+    listJurisdictionPreferenceEntries(rawDataset = null) {
+      const info = this._getJurisdictionDatasetInfo(rawDataset) || this._getJurisdictionDatasetInfo(this._defaultAutoDataset);
       const rows = [];
-      this._collectXDataRows(rows, "primary-us", this._primaryUS?.xdata);
-      this._collectXDataRows(rows, "auto-us", this._autoUS?.xdata);
-      this._collectJurisMapRows(rows);
-      this._collectOverrideOnlyJurisdictionRows(rows);
+      if (info?.kind === "primary") {
+        this._collectXDataRows(rows, info.dataset, info.data?.xdata);
+      } else if (info?.kind === "map") {
+        this._collectJurisMapRows(rows, info);
+      } else {
+        this._collectXDataRows(rows, info?.dataset || this._defaultAutoDataset || "auto-us", info?.data?.xdata);
+      }
+      this._collectOverrideOnlyJurisdictionRows(rows, info?.dataset || null);
       return rows.sort((a, b) => {
         return a.dataset.localeCompare(b.dataset) || a.jurisdiction.localeCompare(b.jurisdiction) || a.category.localeCompare(b.category) || a.key.localeCompare(b.key);
       }).map((row) => ({
@@ -841,7 +1545,7 @@ ${mlzBlock}` : mlzBlock;
     }
     upsertJurisdictionPreferenceEntry(dataset, jurisdiction, category, key, value) {
       const ds = (dataset || "").toString().trim();
-      const normalizedJurisdiction = this._normalizeOverrideJurisdictionForCategory(jurisdiction, category);
+      const normalizedJurisdiction = this._normalizeOverrideJurisdictionForCategory(ds, jurisdiction, category);
       const id = this._makeJurisdictionDatasetOverrideKey(normalizedJurisdiction, category, key);
       const val = (value || "").toString().trim();
       if (!ds || !id || !val) return false;
@@ -854,18 +1558,239 @@ ${mlzBlock}` : mlzBlock;
     }
     removeJurisdictionPreferenceEntry(dataset, jurisdiction, category, key) {
       const ds = (dataset || "").toString().trim();
-      const normalizedJurisdiction = this._normalizeOverrideJurisdictionForCategory(jurisdiction, category);
+      const normalizedJurisdiction = this._normalizeOverrideJurisdictionForCategory(ds, jurisdiction, category);
       const id = this._makeJurisdictionDatasetOverrideKey(normalizedJurisdiction, category, key);
       if (!ds || !id) return false;
       const bucket = this._userJurisdictionOverrides?.[ds];
-      if (!bucket || !Object.prototype.hasOwnProperty.call(bucket, id)) return false;
-      delete bucket[id];
+      if (!bucket) return false;
+      let targetID = id;
+      if (!Object.prototype.hasOwnProperty.call(bucket, targetID)) {
+        const legacyJurisdiction = this._normalizeLegacyOverrideJurisdictionForCategory(ds, normalizedJurisdiction, category);
+        const legacyID = this._makeJurisdictionDatasetOverrideKey(legacyJurisdiction, category, key);
+        if (!legacyID || !Object.prototype.hasOwnProperty.call(bucket, legacyID)) return false;
+        targetID = legacyID;
+      }
+      delete bucket[targetID];
       this._saveJurisdictionOverrides();
       return true;
     }
-    resetJurisdictionPreferenceOverrides() {
-      this._userJurisdictionOverrides = {};
+    resetJurisdictionPreferenceOverrides(rawDataset = null) {
+      if (!rawDataset) {
+        this._userJurisdictionOverrides = {};
+        this._saveJurisdictionOverrides();
+        return;
+      }
+      const dataset = this._normalizeJurisdictionDatasetName(rawDataset);
+      if (!dataset) return;
+      delete this._userJurisdictionOverrides[dataset];
       this._saveJurisdictionOverrides();
+    }
+    importOverrides(kind, rawDataset, payload) {
+      const importKind = (kind || "").toString().trim().toLowerCase();
+      const xdata = payload?.xdata && typeof payload.xdata === "object" && !Array.isArray(payload.xdata) ? payload.xdata : payload;
+      const summary = this._createImportSummary();
+      if (!xdata || typeof xdata !== "object" || Array.isArray(xdata)) {
+        summary.error = "Import file did not contain an xdata object.";
+        return summary;
+      }
+      if (importKind === "journals") {
+        return this._importSecondaryOverrides(rawDataset, xdata, summary);
+      }
+      if (importKind === "abbrev" || importKind === "jurisdiction") {
+        return this._importJurisdictionOverrides(rawDataset, xdata, summary);
+      }
+      summary.error = `Unsupported import target: ${importKind || "unknown"}.`;
+      return summary;
+    }
+    _importSecondaryOverrides(rawDataset, xdata, summary) {
+      const dataset = this._normalizeSecondaryDataset(rawDataset);
+      const defaultRows = xdata?.default;
+      const containerTitles = defaultRows?.["container-title"];
+      if (!defaultRows || typeof defaultRows !== "object" || Array.isArray(defaultRows)) {
+        summary.error = "Import file did not contain xdata.default entries for journal abbreviations.";
+        return summary;
+      }
+      const existingRows = this.listSecondaryContainerTitleAbbreviations(dataset);
+      const existingByKey = new Map(existingRows.map((row) => [this.normalizeKey(row.key), String(row.value ?? "").trim()]));
+      let changed = false;
+      for (const [jurisdiction, categories] of Object.entries(xdata)) {
+        if (String(jurisdiction || "").trim().toLowerCase() !== "default") {
+          this._recordImportSkip(summary, "outside_selected_dataset_scope", jurisdiction);
+          continue;
+        }
+        if (!categories || typeof categories !== "object" || Array.isArray(categories)) {
+          this._recordImportSkip(summary, "invalid_category_block", jurisdiction);
+          continue;
+        }
+        for (const [category, entries] of Object.entries(categories)) {
+          const normalizedCategory = String(category || "").trim().toLowerCase();
+          if (normalizedCategory !== "container-title") {
+            this._recordImportSkip(summary, "unsupported_category", `default::${normalizedCategory}`);
+            continue;
+          }
+          if (!entries || typeof entries !== "object" || Array.isArray(entries)) {
+            this._recordImportSkip(summary, "invalid_entries_block", `default::${normalizedCategory}`);
+            continue;
+          }
+          for (const [rawKey, rawValue] of Object.entries(entries)) {
+            const key = this.normalizeKey(rawKey);
+            const value = String(rawValue ?? "").trim();
+            const context = `default::container-title::${String(rawKey || "").trim()}`;
+            if (!key || !value) {
+              this._recordImportSkip(summary, "blank_key_or_value", context);
+              continue;
+            }
+            const existingValue = existingByKey.get(key);
+            if (existingValue === value) {
+              this._recordImportSkip(summary, "unchanged", context);
+              continue;
+            }
+            if (!this._userSecondaryOverrides[dataset] || typeof this._userSecondaryOverrides[dataset] !== "object") {
+              this._userSecondaryOverrides[dataset] = {};
+            }
+            this._userSecondaryOverrides[dataset][key] = value;
+            existingByKey.set(key, value);
+            changed = true;
+            if (typeof existingValue === "string") {
+              summary.updated += 1;
+            } else {
+              summary.added += 1;
+            }
+          }
+        }
+      }
+      if (changed) this._saveSecondaryOverrides();
+      return this._finalizeImportSummary(summary);
+    }
+    _importJurisdictionOverrides(rawDataset, xdata, summary) {
+      const info = this._getJurisdictionDatasetInfo(rawDataset) || this._getJurisdictionDatasetInfo(this._defaultAutoDataset);
+      if (!info) {
+        summary.error = "Selected dataset could not be resolved.";
+        return summary;
+      }
+      if (info.kind === "map") {
+        summary.error = "Map datasets do not accept abbrev imports.";
+        return summary;
+      }
+      const dataset = info.dataset;
+      const root = String(info.root || this._jurisdictionRootFromFilename(dataset) || "").trim().toLowerCase();
+      const categories = this._getImportableJurisdictionCategories(info);
+      const existingRows = this.listJurisdictionPreferenceEntries(dataset);
+      const existingByID = new Map(
+        existingRows.map((row) => {
+          const id = this._makeJurisdictionDatasetOverrideKey(row.jurisdiction, row.category, row.key);
+          return id ? [id, String(row.value ?? "").trim()] : null;
+        }).filter(Boolean)
+      );
+      if (!this._userJurisdictionOverrides[dataset] || typeof this._userJurisdictionOverrides[dataset] !== "object") {
+        this._userJurisdictionOverrides[dataset] = {};
+      }
+      const bucket = this._userJurisdictionOverrides[dataset];
+      let changed = false;
+      for (const [rawJurisdiction, categoryRows] of Object.entries(xdata)) {
+        const jurisdiction = String(rawJurisdiction || "").trim().toLowerCase();
+        if (!this._isImportJurisdictionInScope(jurisdiction, root)) {
+          this._recordImportSkip(summary, "outside_selected_dataset_scope", jurisdiction);
+          continue;
+        }
+        if (!categoryRows || typeof categoryRows !== "object" || Array.isArray(categoryRows)) {
+          this._recordImportSkip(summary, "invalid_category_block", jurisdiction);
+          continue;
+        }
+        for (const [rawCategory, entries] of Object.entries(categoryRows)) {
+          const category = String(rawCategory || "").trim().toLowerCase();
+          const categoryContext = `${jurisdiction || "default"}::${category}`;
+          if (!categories.has(category)) {
+            this._recordImportSkip(summary, "unsupported_category", categoryContext);
+            continue;
+          }
+          if (!entries || typeof entries !== "object" || Array.isArray(entries)) {
+            this._recordImportSkip(summary, "invalid_entries_block", categoryContext);
+            continue;
+          }
+          for (const [rawKey, rawValue] of Object.entries(entries)) {
+            const key = String(rawKey || "").trim();
+            const value = String(rawValue ?? "").trim();
+            const context = `${jurisdiction || "default"}::${category}::${key}`;
+            if (!key || !value) {
+              this._recordImportSkip(summary, "blank_key_or_value", context);
+              continue;
+            }
+            const normalizedJurisdiction = this._normalizeOverrideJurisdictionForCategory(dataset, jurisdiction, category);
+            const id = this._makeJurisdictionDatasetOverrideKey(normalizedJurisdiction, category, key);
+            if (!id) {
+              this._recordImportSkip(summary, "invalid_override_key", context);
+              continue;
+            }
+            const existingValue = existingByID.get(id);
+            if (existingValue === value) {
+              this._recordImportSkip(summary, "unchanged", context);
+              continue;
+            }
+            bucket[id] = value;
+            existingByID.set(id, value);
+            changed = true;
+            if (typeof existingValue === "string") {
+              summary.updated += 1;
+            } else {
+              summary.added += 1;
+            }
+          }
+        }
+      }
+      if (changed) this._saveJurisdictionOverrides();
+      return this._finalizeImportSummary(summary);
+    }
+    _createImportSummary() {
+      return {
+        added: 0,
+        updated: 0,
+        skipped: 0,
+        skipReasons: /* @__PURE__ */ new Map(),
+        error: ""
+      };
+    }
+    _recordImportSkip(summary, reason, context = "") {
+      if (!summary?.skipReasons) return;
+      summary.skipped += 1;
+      const current = summary.skipReasons.get(reason) || { reason, count: 0, examples: [] };
+      current.count += 1;
+      const example = String(context || "").trim();
+      if (example && current.examples.length < 3 && !current.examples.includes(example)) {
+        current.examples.push(example);
+      }
+      summary.skipReasons.set(reason, current);
+    }
+    _finalizeImportSummary(summary) {
+      return {
+        added: summary.added,
+        updated: summary.updated,
+        skipped: summary.skipped,
+        error: summary.error || "",
+        skipReasons: Array.from(summary.skipReasons.values()).sort((a, b) => a.reason.localeCompare(b.reason))
+      };
+    }
+    _isImportJurisdictionInScope(jurisdiction, root) {
+      const jur = String(jurisdiction || "").trim().toLowerCase();
+      const normalizedRoot = String(root || "").trim().toLowerCase();
+      if (!jur) return false;
+      if (jur === "default") return true;
+      if (!normalizedRoot) return true;
+      return jur === normalizedRoot || jur.startsWith(`${normalizedRoot}:`);
+    }
+    _getImportableJurisdictionCategories(info) {
+      const categories = /* @__PURE__ */ new Set([
+        "container-title",
+        "institution-entire",
+        "institution-part",
+        "place",
+        "title"
+      ]);
+      for (const row of this.listJurisdictionPreferenceEntries(info?.dataset || null)) {
+        const category = String(row?.category || "").trim().toLowerCase();
+        if (category) categories.add(category);
+      }
+      return categories;
     }
     _lookupSecondaryContainerTitle(normalizedKey, rawDataset = null) {
       if (!normalizedKey) return null;
@@ -909,6 +1834,14 @@ ${mlzBlock}` : mlzBlock;
       const dataset = (rawDataset || "").toString().trim() || this._defaultSecondaryDataset;
       if (this._secondaryDatasets?.[dataset]) return dataset;
       return this._defaultSecondaryDataset;
+    }
+    _formatDatasetLabel(dataset) {
+      return String(dataset || "").replace(/^secondary-/i, "").replace(/-/g, " ").replace(/\b([a-z])/g, (match) => match.toUpperCase());
+    }
+    _formatJurisdictionDatasetLabel(info) {
+      const name = String(info?.name || "").trim();
+      if (!name) return this._formatDatasetLabel(info?.dataset);
+      return `${name} (${info.dataset})`;
     }
     _loadSecondaryOverrides() {
       try {
@@ -961,7 +1894,8 @@ ${mlzBlock}` : mlzBlock;
       if (!jur || !cat || !k) return null;
       return `${jur}::${cat}::${k}`;
     }
-    _normalizeOverrideJurisdictionForCategory(jurisdiction, category) {
+    _normalizeOverrideJurisdictionForCategory(dataset, jurisdiction, category) {
+      const ds = (dataset || "").toString().trim().toLowerCase();
       const jur = (jurisdiction || "").toString().trim().toLowerCase();
       const cat = (category || "").toString().trim().toLowerCase();
       if (!jur) return jur;
@@ -969,7 +1903,22 @@ ${mlzBlock}` : mlzBlock;
       if (cat === "place" || cat === "courts" || cat === "jurisdictions") {
         return "default";
       }
+      if (ds.startsWith("auto-")) {
+        return this._jurisdictionRootFromFilename(ds) || "us";
+      }
       return "us";
+    }
+    _normalizeLegacyOverrideJurisdictionForCategory(dataset, jurisdiction, category) {
+      const ds = (dataset || "").toString().trim().toLowerCase();
+      const jur = (jurisdiction || "").toString().trim().toLowerCase();
+      const cat = (category || "").toString().trim().toLowerCase();
+      if (!jur) return jur;
+      if (cat === "place" || cat === "courts" || cat === "jurisdictions") return jur;
+      if (ds.startsWith("auto-")) {
+        const root = this._jurisdictionRootFromFilename(ds) || "us";
+        if (jur === root && root !== "us") return "us";
+      }
+      return jur;
     }
     _getJurisdictionOverrideValue(id) {
       if (!id) return null;
@@ -1002,8 +1951,10 @@ ${mlzBlock}` : mlzBlock;
         }
       }
     }
-    _collectJurisMapRows(rows) {
-      const courts = this._jurisUSMap?.courts;
+    _collectJurisMapRows(rows, mapInfo = this._jurisUSMap) {
+      const mapData = mapInfo?.data || mapInfo || this._jurisUSMap;
+      const dataset = mapInfo?.dataset || this._defaultMapDataset || "juris-us-map";
+      const courts = mapData?.courts;
       if (Array.isArray(courts)) {
         for (const item of courts) {
           if (!Array.isArray(item) || item.length < 2) continue;
@@ -1011,7 +1962,7 @@ ${mlzBlock}` : mlzBlock;
           const name = String(item[1] ?? "").trim();
           if (!code || !name) continue;
           const row = {
-            dataset: "juris-us-map",
+            dataset,
             jurisdiction: "default",
             category: "courts",
             key: code,
@@ -1021,7 +1972,7 @@ ${mlzBlock}` : mlzBlock;
           rows.push(row);
         }
       }
-      const jurisdictions = this._jurisUSMap?.jurisdictions?.default;
+      const jurisdictions = this._getLocalizedMapJurisdictions(mapData);
       if (Array.isArray(jurisdictions)) {
         for (const item of jurisdictions) {
           if (!Array.isArray(item) || item.length < 2) continue;
@@ -1029,7 +1980,7 @@ ${mlzBlock}` : mlzBlock;
           const name = String(item[1] ?? "").trim();
           if (!code || !name) continue;
           const row = {
-            dataset: "juris-us-map",
+            dataset,
             jurisdiction: "default",
             category: "jurisdictions",
             key: code,
@@ -1040,18 +1991,21 @@ ${mlzBlock}` : mlzBlock;
         }
       }
     }
-    _collectOverrideOnlyJurisdictionRows(rows) {
+    _collectOverrideOnlyJurisdictionRows(rows, allowedDataset = null) {
       const seen = new Set(rows.map((row) => row.id).filter(Boolean));
+      const normalizedAllowedDataset = allowedDataset ? this._normalizeJurisdictionDatasetName(allowedDataset) : null;
       for (const [dataset, bucket] of Object.entries(this._userJurisdictionOverrides || {})) {
         if (!bucket || typeof bucket !== "object" || Array.isArray(bucket)) continue;
+        if (normalizedAllowedDataset && dataset !== normalizedAllowedDataset) continue;
         for (const [overrideKey, overrideValue] of Object.entries(bucket)) {
           const parsed = this._parseJurisdictionDatasetOverrideKey(overrideKey);
           if (!parsed) continue;
-          const id = this._makeJurisdictionOverrideID(dataset, parsed.jurisdiction, parsed.category, parsed.key);
+          const mappedJurisdiction = this._normalizeListedOverrideJurisdiction(dataset, parsed.jurisdiction, parsed.category);
+          const id = this._makeJurisdictionOverrideID(dataset, mappedJurisdiction, parsed.category, parsed.key);
           if (!id || seen.has(id)) continue;
           rows.push({
             dataset: String(dataset),
-            jurisdiction: parsed.jurisdiction,
+            jurisdiction: mappedJurisdiction,
             category: parsed.category,
             key: parsed.key,
             value: String(overrideValue),
@@ -1069,6 +2023,18 @@ ${mlzBlock}` : mlzBlock;
       const key = String(parts.slice(2).join("::") || "").trim();
       if (!jurisdiction || !category || !key) return null;
       return { jurisdiction, category, key };
+    }
+    _normalizeListedOverrideJurisdiction(dataset, jurisdiction, category) {
+      const ds = (dataset || "").toString().trim().toLowerCase();
+      const jur = (jurisdiction || "").toString().trim().toLowerCase();
+      const cat = (category || "").toString().trim().toLowerCase();
+      if (!jur) return jur;
+      if (cat === "place" || cat === "courts" || cat === "jurisdictions") return jur;
+      if (ds.startsWith("auto-")) {
+        const root = this._jurisdictionRootFromFilename(ds) || "us";
+        if (jur === "us" && root !== "us") return root;
+      }
+      return jur;
     }
     _loadJurisdictionOverrides() {
       try {
@@ -1126,6 +2092,28 @@ ${mlzBlock}` : mlzBlock;
       const value = supplemental[normalized] || null;
       return value ? { jurisdiction: "default", value } : null;
     }
+    _lookupInstitutionCategoryValue(category, rawKey, normalizedKey, jurisdiction, xdata, overrides) {
+      const categoryName = String(category || "").trim().toLowerCase();
+      if (!categoryName || !xdata) return null;
+      const lookupKeys = [];
+      for (const candidate of [rawKey, normalizedKey]) {
+        const value = String(candidate || "").trim();
+        if (value && !lookupKeys.includes(value)) {
+          lookupKeys.push(value);
+        }
+      }
+      for (const lookupKey of lookupKeys) {
+        const hit = lookupJurChainWithOverrides(
+          xdata,
+          overrides,
+          jurisdiction,
+          categoryName,
+          lookupKey
+        );
+        if (hit?.value != null) return hit;
+      }
+      return null;
+    }
   };
   function lookupJurChainWithOverrides(xdata, overrides, jur, variable, key) {
     if (!xdata) return null;
@@ -1176,16 +2164,47 @@ ${mlzBlock}` : mlzBlock;
       this._maxShortFormLogs = 40;
       this._fieldLogCount = 0;
       this._maxFieldLogs = 40;
+      this._citationDataLogCount = 0;
+      this._maxCitationDataLogs = 80;
       this._itemObserverID = null;
       this._itemPanePatchTimer = null;
       this._itemPanePatchAttempts = 0;
       this._maxItemPanePatchAttempts = 20;
+      this._commenterCreatorTypeID = "9001";
+      this._commenterCreatorTypeName = "commenter";
+      this._commenterCreatorTypeLabel = "Commenter";
+      this._translatorCreatorTypeID = "9002";
+      this._translatorCreatorTypeName = "ibcslm-translator";
+      this._translatorCreatorTypeLabel = "Translator";
+      this._commenterRowID = "ibcslm-commenter-row";
+      this._extraPersonTypes = [
+        {
+          key: "commenter",
+          creatorTypeID: this._commenterCreatorTypeID,
+          creatorTypeName: this._commenterCreatorTypeName,
+          label: this._commenterCreatorTypeLabel,
+          storage: "creator",
+          mlzType: "commenter",
+          cslField: "commenter"
+        },
+        {
+          key: "translator",
+          creatorTypeID: this._translatorCreatorTypeID,
+          creatorTypeName: this._translatorCreatorTypeName,
+          label: this._translatorCreatorTypeLabel,
+          storage: "creator",
+          mlzType: "translator",
+          cslField: "translator"
+        }
+      ];
       this._jurisdictionRowID = "ibcslm-jurisdiction-row";
       this._customCourtRowID = "ibcslm-custom-court-row";
       this._syncInFlight = /* @__PURE__ */ new Set();
       this._journalAbbrByContainerTitleKey = /* @__PURE__ */ new Map();
     }
     patch() {
+      this._patchCreatorTypes();
+      this._patchInfoBoxPrototype();
       this._patchRetrieveItem();
       this._patchAbbreviations();
       this._patchLoadJurisdictionStyle();
@@ -1207,7 +2226,146 @@ ${mlzBlock}` : mlzBlock;
         if (this._orig.loadJurisdictionStyle) sysProto.loadJurisdictionStyle = this._orig.loadJurisdictionStyle;
         if (this._orig.retrieveStyleModule) sysProto.retrieveStyleModule = this._orig.retrieveStyleModule;
       }
+      const creatorTypes = Zotero?.CreatorTypes;
+      if (creatorTypes) {
+        if (this._orig.creatorTypesGetID) creatorTypes.getID = this._orig.creatorTypesGetID;
+        if (this._orig.creatorTypesGetName) creatorTypes.getName = this._orig.creatorTypesGetName;
+        if (this._orig.creatorTypesGetLocalizedString) creatorTypes.getLocalizedString = this._orig.creatorTypesGetLocalizedString;
+        if (this._orig.creatorTypesGetTypesForItemType) creatorTypes.getTypesForItemType = this._orig.creatorTypesGetTypesForItemType;
+      }
+      const infoBoxProto = this._getInfoBoxPrototype();
+      if (infoBoxProto) {
+        if (this._orig.infoBoxProtoRender) infoBoxProto.render = this._orig.infoBoxProtoRender;
+        if (this._orig.infoBoxProtoModifyCreator) infoBoxProto.modifyCreator = this._orig.infoBoxProtoModifyCreator;
+        if (this._orig.infoBoxProtoRemoveCreator) infoBoxProto.removeCreator = this._orig.infoBoxProtoRemoveCreator;
+      }
       if (this._orig.getCiteProc) Zotero.Style.prototype.getCiteProc = this._orig.getCiteProc;
+    }
+    _patchCreatorTypes() {
+      const creatorTypes = Zotero?.CreatorTypes;
+      if (!creatorTypes) return;
+      if (!this._orig.creatorTypesGetID && creatorTypes.getID) this._orig.creatorTypesGetID = creatorTypes.getID;
+      if (!this._orig.creatorTypesGetName && creatorTypes.getName) this._orig.creatorTypesGetName = creatorTypes.getName;
+      if (!this._orig.creatorTypesGetLocalizedString && creatorTypes.getLocalizedString) {
+        this._orig.creatorTypesGetLocalizedString = creatorTypes.getLocalizedString;
+      }
+      if (!this._orig.creatorTypesGetTypesForItemType && creatorTypes.getTypesForItemType) {
+        this._orig.creatorTypesGetTypesForItemType = creatorTypes.getTypesForItemType;
+      }
+      const self = this;
+      creatorTypes.getID = function(creatorType) {
+        const extraPersonType = self._getExtraPersonConfigByCreatorType(creatorType);
+        if (extraPersonType) return extraPersonType.creatorTypeID;
+        return self._orig.creatorTypesGetID?.apply(this, arguments);
+      };
+      creatorTypes.getName = function(creatorTypeID) {
+        const extraPersonType = self._getExtraPersonConfigByCreatorType(creatorTypeID);
+        if (extraPersonType) return extraPersonType.creatorTypeName;
+        return self._orig.creatorTypesGetName?.apply(this, arguments);
+      };
+      creatorTypes.getLocalizedString = function(creatorType) {
+        const extraPersonType = self._getExtraPersonConfigByCreatorType(creatorType);
+        if (extraPersonType) return extraPersonType.label;
+        return self._orig.creatorTypesGetLocalizedString?.apply(this, arguments);
+      };
+      creatorTypes.getTypesForItemType = function(itemTypeID) {
+        const result = self._orig.creatorTypesGetTypesForItemType?.apply(this, arguments) || [];
+        if (!self._itemTypeSupportsExtraPerson(itemTypeID)) return result;
+        const next = [...result];
+        for (const extraPersonType of self._extraPersonTypes) {
+          if (next.some((entry) => self._getExtraPersonConfigByCreatorType(entry?.id || entry?.name)?.key === extraPersonType.key)) continue;
+          next.push({ id: extraPersonType.creatorTypeID, name: extraPersonType.creatorTypeName });
+        }
+        return next;
+      };
+    }
+    _getInfoBoxPrototype() {
+      try {
+        const mainWindow = Zotero.getMainWindow?.();
+        const ctor = mainWindow?.customElements?.get?.("info-box");
+        return ctor?.prototype || null;
+      } catch (e) {
+      }
+      return null;
+    }
+    _patchInfoBoxPrototype(protoOverride = null) {
+      const proto = protoOverride || this._getInfoBoxPrototype();
+      if (!proto) return;
+      if (!this._orig.infoBoxProtoRender && typeof proto.render === "function") {
+        this._orig.infoBoxProtoRender = proto.render;
+      }
+      if (!this._orig.infoBoxProtoModifyCreator && typeof proto.modifyCreator === "function") {
+        this._orig.infoBoxProtoModifyCreator = proto.modifyCreator;
+      }
+      if (!this._orig.infoBoxProtoRemoveCreator && typeof proto.removeCreator === "function") {
+        this._orig.infoBoxProtoRemoveCreator = proto.removeCreator;
+      }
+      const self = this;
+      if (this._orig.infoBoxProtoRender) {
+        proto.render = function(...args) {
+          const result = self._orig.infoBoxProtoRender.apply(this, args);
+          try {
+            try {
+              const itemID = this.item?.id;
+              const customRows = this.querySelectorAll?.("[data-custom-row-id]")?.length || 0;
+              Zotero.debug(`[IndigoBook CSL-M] info-box proto render: item=${String(itemID || "")} customRows=${String(customRows)}`);
+            } catch (e) {
+            }
+            self._ensureExtraPersonMenuItems(this);
+            self._removeCommenterField(this);
+            self._renderExtraPersonCreatorRows(this);
+          } catch (e) {
+            try {
+              Zotero.debug(`[IndigoBook CSL-M] info-box commenter render patch failed: ${String(e)}`);
+            } catch (_) {
+            }
+          }
+          return result;
+        };
+      }
+      if (this._orig.infoBoxProtoModifyCreator) {
+        proto.modifyCreator = function(index, fields) {
+          const nativeCount = this.item?.numCreators?.() || 0;
+          const extraPersonType = self._getExtraPersonConfigByCreatorType(fields?.creatorTypeID);
+          const existingExtraPersonType = self._getExtraPersonConfigByIndex(this, index);
+          if (extraPersonType) {
+            const nextPerson = self._extraPersonFromCreatorFields(fields);
+            self._setStoredExtraPerson(this.item, extraPersonType, nextPerson);
+            self._markExtraPersonCreatorRow(self._getCreatorTypeLabel(this, index)?.closest?.(".meta-row"), extraPersonType);
+            return true;
+          }
+          if (existingExtraPersonType) {
+            self._setStoredExtraPerson(this.item, existingExtraPersonType, null);
+            const nativeIndex2 = self._getNativeCreatorIndex(this, index);
+            return self._orig.infoBoxProtoModifyCreator.call(this, Math.min(nativeIndex2, nativeCount), fields);
+          }
+          const nativeIndex = self._getNativeCreatorIndex(this, index);
+          return self._orig.infoBoxProtoModifyCreator.call(this, nativeIndex, fields);
+        };
+      }
+      if (this._orig.infoBoxProtoRemoveCreator) {
+        proto.removeCreator = async function(index) {
+          const extraPersonType = self._getExtraPersonConfigByIndex(this, index);
+          if (extraPersonType) {
+            self._setStoredExtraPerson(this.item, extraPersonType, null);
+            self._removeExtraPersonCreatorRows(this, extraPersonType);
+            if (this.saveOnEdit) {
+              await this.item.saveTx({ skipDateModifiedUpdate: true });
+            }
+            return;
+          }
+          const nativeIndex = self._getNativeCreatorIndex(this, index);
+          return self._orig.infoBoxProtoRemoveCreator.call(this, nativeIndex);
+        };
+      }
+    }
+    _patchInfoBoxPrototypeFromInstance(infoBox) {
+      try {
+        const proto = Object.getPrototypeOf(infoBox);
+        if (!proto) return;
+        this._patchInfoBoxPrototype(proto);
+      } catch (e) {
+      }
     }
     _registerCaseReporterSync() {
       if (!Zotero?.Notifier?.registerObserver) return;
@@ -1267,12 +2425,22 @@ ${mlzBlock}` : mlzBlock;
         this._scheduleItemPaneRenderPatch();
         return;
       }
+      this._patchInfoBoxPrototypeFromInstance(infoBox);
       const self = this;
       this._orig.infoBoxOwner = infoBox;
       this._orig.infoBoxRender = infoBox.render;
       infoBox.render = function(...args) {
         const result = self._orig.infoBoxRender.apply(this, args);
         try {
+          try {
+            const itemID = this.item?.id;
+            const customRows = this.querySelectorAll?.("[data-custom-row-id]")?.length || 0;
+            Zotero.debug(`[IndigoBook CSL-M] info-box instance render: item=${String(itemID || "")} customRows=${String(customRows)}`);
+          } catch (e) {
+          }
+          self._ensureExtraPersonMenuItems(this);
+          self._removeCommenterField(this);
+          self._renderExtraPersonCreatorRows(this);
           self._renderJurisdictionField(this);
           self._renderCourtField(this);
           self._renderCustomCourtField(this);
@@ -1316,6 +2484,8 @@ ${mlzBlock}` : mlzBlock;
         if (this._orig.infoBoxOwner && this._orig.infoBoxRender) {
           this._orig.infoBoxOwner.render = this._orig.infoBoxRender;
         }
+        this._removeExtraPersonCreatorRows(this._getActiveInfoBox());
+        this._removeCommenterField(this._getActiveInfoBox());
         this._removeJurisdictionField(this._getActiveInfoBox());
         this._removeCustomCourtField(this._getActiveInfoBox());
       } catch (e) {
@@ -1491,6 +2661,164 @@ ${mlzBlock}` : mlzBlock;
       }
       this._updateJurisdictionRow(infoBox, row, item);
     }
+    _renderExtraPersonCreatorRows(infoBox) {
+      for (const extraPersonType of this._extraPersonTypes) {
+        this._renderExtraPersonCreatorRow(infoBox, extraPersonType);
+      }
+    }
+    _renderExtraPersonCreatorRow(infoBox, extraPersonType) {
+      const item = infoBox?.item;
+      if (!item || item.deleted || !this._itemTypeSupportsExtraPerson(item.itemTypeID)) {
+        this._removeExtraPersonCreatorRows(infoBox, extraPersonType);
+        return;
+      }
+      const extraPerson = this._getStoredExtraPerson(item, extraPersonType);
+      if (!extraPerson) {
+        const activeRow = this._getActiveExtraPersonCreatorRow(infoBox, extraPersonType);
+        if (activeRow) {
+          this._markExtraPersonCreatorRow(activeRow, extraPersonType);
+          return;
+        }
+        this._removeExtraPersonCreatorRows(infoBox, extraPersonType);
+        try {
+          Zotero.debug(`[IndigoBook CSL-M] ${extraPersonType.key} creator row skipped: item=${String(item?.id || "")} no stored value`);
+        } catch (e) {
+        }
+        return;
+      }
+      if (typeof infoBox.addCreatorRow !== "function") {
+        try {
+          Zotero.debug(`[IndigoBook CSL-M] ${extraPersonType.key} creator row skipped: item=${String(item?.id || "")} addCreatorRow unavailable`);
+        } catch (e) {
+        }
+        return;
+      }
+      const existingRow = this._getExtraPersonCreatorRows(infoBox, extraPersonType)[0];
+      if (existingRow) {
+        this._markExtraPersonCreatorRow(existingRow, extraPersonType);
+        return;
+      }
+      this._removeEmptyDefaultCreatorRows(infoBox);
+      const creatorData = this._extraPersonToCreatorData(extraPerson);
+      const rowIndex = infoBox._creatorCount;
+      infoBox.addCreatorRow(creatorData, extraPersonType.creatorTypeID, false, infoBox._firstRowBeforeCreators || null);
+      const label = this._getCreatorTypeLabel(infoBox, rowIndex);
+      const row = label?.closest(".meta-row") || null;
+      if (!row) return;
+      this._markExtraPersonCreatorRow(row, extraPersonType);
+      row.setAttribute("data-ibcslm-rendered-extra-person-row", extraPersonType.key);
+      try {
+        Zotero.debug(`[IndigoBook CSL-M] ${extraPersonType.key} creator row rendered: item=${String(item?.id || "")} rowIndex=${String(rowIndex)}`);
+      } catch (e) {
+      }
+    }
+    _getCreatorTypeLabel(infoBox, rowIndex) {
+      return infoBox?.querySelector?.(`.meta-label[fieldname="creator-${rowIndex}-typeID"]`) || infoBox?.querySelector?.(`.meta-label[fieldname="creator-${rowIndex}"]`) || null;
+    }
+    _getCreatorRowIndex(row) {
+      const fieldName = String(row?.querySelector?.(".meta-label")?.getAttribute?.("fieldname") || "");
+      const match = fieldName.match(/^creator-(\d+)(?:-|$)/);
+      return match ? Number(match[1]) : null;
+    }
+    _getCreatorRows(infoBox) {
+      if (!infoBox?.querySelectorAll) return [];
+      const labels = Array.from(infoBox.querySelectorAll('.meta-label[fieldname^="creator-"]'));
+      const rows = [];
+      for (const label of labels) {
+        const row = label.closest?.(".meta-row") || null;
+        if (row && !rows.includes(row)) rows.push(row);
+      }
+      return rows;
+    }
+    _getExtraPersonCreatorRows(infoBox, extraPersonType = null) {
+      return this._getCreatorRows(infoBox).filter((row) => {
+        const rowTypeKey = row.getAttribute?.("data-ibcslm-extra-person-type") || "";
+        if (rowTypeKey) return !extraPersonType || rowTypeKey === extraPersonType.key;
+        if (!extraPersonType && row.getAttribute?.("data-ibcslm-commenter-row") === "true") return true;
+        const label = row.querySelector?.(".meta-label");
+        const rowConfig = this._getExtraPersonConfigByCreatorType(label?.getAttribute?.("typeid"));
+        return rowConfig && (!extraPersonType || rowConfig.key === extraPersonType.key);
+      });
+    }
+    _getExtraPersonConfigByIndex(infoBox, rowIndex) {
+      const row = this._getCreatorTypeLabel(infoBox, rowIndex)?.closest?.(".meta-row") || null;
+      if (!row) return null;
+      const rowTypeKey = row.getAttribute?.("data-ibcslm-extra-person-type") || "";
+      if (rowTypeKey) return this._extraPersonTypes.find((config) => config.key === rowTypeKey) || null;
+      if (row.getAttribute?.("data-ibcslm-commenter-row") === "true") {
+        return this._extraPersonTypes.find((config) => config.key === "commenter") || null;
+      }
+      const label = row.querySelector?.(".meta-label");
+      return this._getExtraPersonConfigByCreatorType(label?.getAttribute?.("typeid"));
+    }
+    _getNativeCreatorIndex(infoBox, rowIndex) {
+      let nativeIndex = Number(rowIndex) || 0;
+      for (const row of this._getExtraPersonCreatorRows(infoBox)) {
+        const extraIndex = this._getCreatorRowIndex(row);
+        if (extraIndex != null && extraIndex < rowIndex) nativeIndex -= 1;
+      }
+      return Math.max(0, nativeIndex);
+    }
+    _getActiveExtraPersonCreatorRow(infoBox, extraPersonType) {
+      const activeElement = infoBox?.ownerDocument?.activeElement || null;
+      return this._getExtraPersonCreatorRows(infoBox, extraPersonType).find((row) => {
+        return activeElement && row.contains?.(activeElement);
+      }) || null;
+    }
+    _markExtraPersonCreatorRow(row, extraPersonType) {
+      if (!row) return;
+      row.setAttribute("data-ibcslm-extra-person-type", extraPersonType.key);
+      if (extraPersonType.key === "commenter") row.setAttribute("data-ibcslm-commenter-row", "true");
+      const plusButton = row.querySelector(".zotero-clicky-plus");
+      const optionsButton = row.querySelector(".zotero-clicky-options");
+      const grippy = row.querySelector(".zotero-clicky-grippy");
+      if (plusButton) plusButton.hidden = false;
+      if (optionsButton) optionsButton.hidden = false;
+      if (grippy) {
+        grippy.hidden = true;
+        grippy.disabled = true;
+      }
+    }
+    _removeEmptyDefaultCreatorRows(infoBox) {
+      const item = infoBox?.item;
+      if (item?.numCreators?.()) return;
+      for (const row of this._getCreatorRows(infoBox)) {
+        if (this._getExtraPersonCreatorRows(infoBox).includes(row)) continue;
+        const values = Array.from(row.querySelectorAll("input, textarea, editable-text")).map((node) => {
+          return String(node.value ?? node.getAttribute?.("value") ?? "").trim();
+        });
+        if (values.some(Boolean)) continue;
+        row.parentNode?.removeChild(row);
+        if (typeof infoBox._creatorCount === "number" && infoBox._creatorCount > 0) {
+          infoBox._creatorCount -= 1;
+        }
+      }
+    }
+    _ensureExtraPersonMenuItems(infoBox) {
+      const item = infoBox?.item;
+      if (!item || !this._itemTypeSupportsExtraPerson(item.itemTypeID) || !infoBox.editable) return;
+      const menu = infoBox._creatorTypeMenu;
+      if (!menu) return;
+      const doc = menu.ownerDocument || infoBox.ownerDocument;
+      for (const extraPersonType of this._extraPersonTypes) {
+        const existing = Array.from(menu.children || []).some((node) => {
+          return String(node?.getAttribute?.("typeid") || "") === extraPersonType.creatorTypeID;
+        });
+        if (existing) continue;
+        const menuitem = doc.createXULElement("menuitem");
+        menuitem.setAttribute("label", extraPersonType.label);
+        menuitem.setAttribute("typeid", extraPersonType.creatorTypeID);
+        menu.appendChild(menuitem);
+      }
+    }
+    _removeExtraPersonCreatorRows(infoBox, extraPersonType = null) {
+      for (const row of this._getExtraPersonCreatorRows(infoBox, extraPersonType)) {
+        row.parentNode?.removeChild(row);
+        if (typeof infoBox._creatorCount === "number" && infoBox._creatorCount > 0) {
+          infoBox._creatorCount -= 1;
+        }
+      }
+    }
     _renderCourtField(infoBox) {
       const item = infoBox?.item;
       const itemTypeName = item ? Zotero?.ItemTypes?.getName?.(item.itemTypeID) : null;
@@ -1529,6 +2857,13 @@ ${mlzBlock}` : mlzBlock;
     _removeJurisdictionField(infoBox) {
       const row = infoBox?.querySelector?.(`#${this._jurisdictionRowID}`);
       if (row?.parentNode) row.parentNode.removeChild(row);
+    }
+    _removeCommenterField(infoBox) {
+      const row = infoBox?.querySelector?.(`#${this._commenterRowID}`);
+      if (row?.parentNode) row.parentNode.removeChild(row);
+      for (const customRow of infoBox?.querySelectorAll?.('[data-custom-row-id$="indigobook-cslm-commenter-row"]') || []) {
+        customRow.parentNode?.removeChild(customRow);
+      }
     }
     _removeCustomCourtField(infoBox) {
       const row = infoBox?.querySelector?.(`#${this._customCourtRowID}`);
@@ -1735,35 +3070,19 @@ ${mlzBlock}` : mlzBlock;
     }
     _buildJurisdictionMenuList(infoBox, item, currentJurisdiction, displayValue) {
       const doc = infoBox.ownerDocument;
-      const menulist = doc.createXULElement("menulist");
-      menulist.id = "itembox-field-jurisdiction-menu";
-      menulist.className = "zotero-clicky keyboard-clickable";
-      menulist.setAttribute("aria-labelledby", "itembox-field-jurisdiction-label");
-      menulist.setAttribute("fieldname", "jurisdiction");
-      menulist.setAttribute("tooltiptext", currentJurisdiction);
-      const popup = menulist.appendChild(doc.createXULElement("menupopup"));
-      const options = this._getJurisdictionOptions(currentJurisdiction);
-      for (const option of options) {
-        const menuitem = doc.createXULElement("menuitem");
-        menuitem.setAttribute("value", option.code);
-        menuitem.setAttribute("label", option.label);
-        menuitem.setAttribute("tooltiptext", option.code);
-        popup.appendChild(menuitem);
-      }
-      menulist.value = currentJurisdiction;
-      if (!menulist.selectedItem && options.length) {
-        menulist.selectedIndex = options.findIndex((option) => option.code === currentJurisdiction);
-        if (menulist.selectedIndex < 0) menulist.selectedIndex = 0;
-      }
-      if (menulist.selectedItem && displayValue) {
-        menulist.setAttribute("label", menulist.selectedItem.getAttribute("label"));
-      }
-      menulist.addEventListener("command", async () => {
-        const selectedCode = String(menulist.value || "").trim().toLowerCase();
-        if (!selectedCode) return;
-        await this._saveJurisdictionFromMenu(item, selectedCode);
+      return this._buildFilteredPickerControl(doc, {
+        fieldName: "jurisdiction",
+        inputId: "itembox-field-jurisdiction-input",
+        listId: "itembox-field-jurisdiction-list",
+        currentValue: currentJurisdiction,
+        displayValue,
+        options: this._getJurisdictionOptions(currentJurisdiction),
+        minChars: 2,
+        onSelect: async (option) => {
+          await this._saveJurisdictionFromMenu(item, option.code);
+        },
+        formatOptionText: (option) => option.label
       });
-      return menulist;
     }
     _buildCourtMenuList(infoBox, item, currentJurisdiction, currentCourtKey, displayValue) {
       const doc = infoBox.ownerDocument;
@@ -1772,12 +3091,20 @@ ${mlzBlock}` : mlzBlock;
       menulist.className = "zotero-clicky keyboard-clickable";
       menulist.setAttribute("aria-labelledby", "itembox-field-court-label");
       menulist.setAttribute("fieldname", "court");
-      menulist.setAttribute("editable", "true");
-      menulist.setAttribute("flex", "1");
       menulist.setAttribute("tooltiptext", currentCourtKey);
+      menulist.style.flex = "1";
       const popup = menulist.appendChild(doc.createXULElement("menupopup"));
       const options = this._getCourtOptions(currentJurisdiction, currentCourtKey);
-      const compoundCurrentValue = `${currentJurisdiction}||${currentCourtKey}`;
+      const hasCourt = !!String(currentCourtKey || "").trim();
+      const noEntryValue = `${currentJurisdiction}||__no_entry__`;
+      const compoundCurrentValue = hasCourt ? `${currentJurisdiction}||${currentCourtKey}` : noEntryValue;
+      if (!hasCourt) {
+        const placeholder = doc.createXULElement("menuitem");
+        placeholder.setAttribute("value", noEntryValue);
+        placeholder.setAttribute("label", "no entry");
+        placeholder.setAttribute("tooltiptext", "no entry");
+        popup.appendChild(placeholder);
+      }
       for (const option of options) {
         const menuitem = doc.createXULElement("menuitem");
         menuitem.setAttribute("value", `${option.jurisdiction}||${option.key}`);
@@ -1786,7 +3113,9 @@ ${mlzBlock}` : mlzBlock;
         popup.appendChild(menuitem);
       }
       menulist.value = compoundCurrentValue;
-      if (!menulist.selectedItem && options.length) {
+      if (!hasCourt && menulist.selectedItem) {
+        menulist.setAttribute("label", "no entry");
+      } else if (!menulist.selectedItem && options.length) {
         const fallbackIndex = options.findIndex((option) => !option.isChild && option.key === currentCourtKey && option.jurisdiction === currentJurisdiction);
         menulist.selectedIndex = fallbackIndex >= 0 ? fallbackIndex : 0;
       }
@@ -1796,14 +3125,279 @@ ${mlzBlock}` : mlzBlock;
       const saveCourtValue = async () => {
         const selectedValue = String(menulist.value || "").trim();
         if (!selectedValue) return;
+        if (selectedValue.endsWith("||__no_entry__")) {
+          const extra = String(item.getField?.("extra") || "");
+          let nextExtra = this.Jurisdiction.updateMLZExtraField?.(extra, "court", "") || extra;
+          if (nextExtra === extra && String(item.getField?.("court") || "").trim() === "") return;
+          item.setField("extra", nextExtra);
+          item.setField("court", "");
+          await item.saveTx({ skipDateModifiedUpdate: true });
+          try {
+            const infoBox2 = this._getActiveInfoBox?.();
+            if (infoBox2) {
+              this._renderCourtField(infoBox2);
+              this._renderCustomCourtField(infoBox2);
+            }
+          } catch (e) {
+          }
+          return;
+        }
         await this._saveCourtFromMenu(item, selectedValue);
       };
       menulist.addEventListener("command", saveCourtValue);
       menulist.addEventListener("change", saveCourtValue);
       return menulist;
     }
+    _buildFilteredPickerControl(doc, {
+      fieldName,
+      inputId,
+      listId,
+      currentValue,
+      displayValue,
+      options,
+      minChars = 2,
+      onSelect,
+      formatOptionText
+    }) {
+      let currentDisplayValue = String(displayValue || "");
+      let currentRawValue = String(currentValue || "");
+      const wrapper = doc.createElement("div");
+      wrapper.style.display = "flex";
+      wrapper.style.alignItems = "center";
+      wrapper.style.gap = "0";
+      wrapper.style.width = "100%";
+      wrapper.style.position = "relative";
+      if (fieldName === "jurisdiction") {
+        wrapper.style.maxWidth = "22em";
+      }
+      const input = doc.createElement("input");
+      input.id = inputId;
+      input.className = "value";
+      input.setAttribute("fieldname", fieldName);
+      input.setAttribute("aria-labelledby", `itembox-field-${fieldName}-label`);
+      input.autocomplete = "off";
+      input.spellcheck = false;
+      input.style.flex = "1";
+      input.style.minWidth = "0";
+      input.value = currentDisplayValue;
+      input.title = currentRawValue;
+      input.style.boxSizing = "border-box";
+      input.style.width = "100%";
+      input.style.maxWidth = fieldName === "jurisdiction" ? "22em" : "100%";
+      input.style.whiteSpace = "nowrap";
+      input.style.overflow = "hidden";
+      input.style.textOverflow = "ellipsis";
+      const normalizedOptions = Array.isArray(options) ? options.map((option) => ({
+        ...option,
+        displayText: String(typeof formatOptionText === "function" ? formatOptionText(option) : option.label || option.code || "").trim(),
+        searchText: this._normalizeMenuSearchText(`${String(option.label || "")} ${String(option.code || "")} ${String(option.abbreviation || "")}`)
+      })).filter((option) => option.displayText) : [];
+      const popup = doc.createElement("div");
+      popup.id = listId;
+      popup.style.position = "absolute";
+      popup.style.left = "0";
+      popup.style.right = "0";
+      popup.style.top = "100%";
+      popup.style.zIndex = "2000";
+      popup.style.maxHeight = "220px";
+      popup.style.overflowY = "auto";
+      popup.style.border = "1px solid ThreeDShadow";
+      popup.style.background = "Field";
+      popup.style.color = "FieldText";
+      popup.style.display = "none";
+      popup.style.boxShadow = "0 2px 8px rgba(0,0,0,0.2)";
+      popup.style.marginTop = "2px";
+      const hidePopup = () => {
+        popup.style.display = "none";
+        while (popup.firstChild) popup.removeChild(popup.firstChild);
+      };
+      const renderOptions = () => {
+        const query = this._normalizeMenuSearchText(String(input.value || ""));
+        hidePopup();
+        if (query.length < Math.max(1, Number(minChars) || 2)) return;
+        const matches = normalizedOptions.filter((option) => option.searchText.includes(query));
+        if (!matches.length) {
+          const empty = doc.createElement("div");
+          empty.textContent = "No matches";
+          empty.style.padding = "4px 8px";
+          empty.style.opacity = "0.7";
+          popup.appendChild(empty);
+          popup.style.display = "block";
+          return;
+        }
+        for (const option of matches.slice(0, 100)) {
+          const row = doc.createElement("button");
+          row.type = "button";
+          row.textContent = option.displayText;
+          row.title = option.displayText;
+          row.style.display = "block";
+          row.style.width = "100%";
+          row.style.boxSizing = "border-box";
+          row.style.textAlign = "left";
+          row.style.padding = "2px 8px";
+          row.style.border = "0";
+          row.style.margin = "0";
+          row.style.background = "transparent";
+          row.style.color = "inherit";
+          row.style.whiteSpace = "nowrap";
+          row.style.overflow = "hidden";
+          row.style.textOverflow = "ellipsis";
+          row.style.lineHeight = "1.2";
+          row.addEventListener("mousedown", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          });
+          row.addEventListener("click", async () => {
+            input.value = option.displayText;
+            input.title = option.displayText;
+            currentDisplayValue = option.displayText;
+            currentRawValue = option.code;
+            hidePopup();
+            await onSelect?.(option);
+          });
+          popup.appendChild(row);
+        }
+        popup.style.display = "block";
+      };
+      const resolveSelectedOption = async () => {
+        const raw = String(input.value || "").trim();
+        if (!raw) return;
+        const normalizedRaw = this._normalizeMenuSearchText(raw);
+        const exact = normalizedOptions.find((option) => {
+          return this._normalizeMenuSearchText(option.displayText) === normalizedRaw || this._normalizeMenuSearchText(option.code) === normalizedRaw;
+        });
+        const uniquePrefix = !exact ? normalizedOptions.filter((option) => option.searchText.includes(normalizedRaw)) : [];
+        const match = exact || (uniquePrefix.length === 1 ? uniquePrefix[0] : null);
+        if (!match) {
+          input.value = currentDisplayValue;
+          input.title = currentRawValue;
+          hidePopup();
+          return;
+        }
+        input.value = match.displayText;
+        input.title = match.code;
+        currentDisplayValue = match.displayText;
+        currentRawValue = match.code;
+        hidePopup();
+        await onSelect?.(match);
+      };
+      input.addEventListener("input", renderOptions);
+      input.addEventListener("focus", () => {
+        if (typeof input.select === "function") input.select();
+        renderOptions();
+      });
+      input.addEventListener("change", resolveSelectedOption);
+      input.addEventListener("blur", resolveSelectedOption);
+      input.addEventListener("keydown", (event) => {
+        const key = String(event.key || "");
+        if (key === "Escape") {
+          hidePopup();
+          return;
+        }
+        if (key !== "Enter") return;
+        event.preventDefault();
+        resolveSelectedOption();
+      });
+      wrapper.appendChild(input);
+      wrapper.appendChild(popup);
+      return wrapper;
+    }
+    _attachMenuSearchFilter(menulist, popup, { minChars = 2, displayValue = "" } = {}) {
+      if (!menulist || !popup) return;
+      const searchField = menulist.inputField || menulist;
+      const state = {
+        timer: null,
+        minChars: Math.max(1, Number(minChars) || 2)
+      };
+      const clearTimer = () => {
+        if (!state.timer) return;
+        clearTimeout(state.timer);
+        state.timer = null;
+      };
+      const setAllVisible = () => {
+        this._removeMenuNoResultsItem(popup);
+        for (const node of Array.from(popup.children || [])) {
+          if (node?.localName !== "menuitem") continue;
+          node.hidden = false;
+        }
+      };
+      const applyFilter = (rawQuery = "") => {
+        const normalizedQuery = this._normalizeMenuSearchText(rawQuery);
+        if (!normalizedQuery || normalizedQuery.length < state.minChars) {
+          setAllVisible();
+          return;
+        }
+        let visibleCount = 0;
+        for (const node of Array.from(popup.children || [])) {
+          if (node?.localName !== "menuitem") continue;
+          const haystack = String(node._ibcslmSearchText || node.getAttribute("label") || node.getAttribute("value") || "").trim();
+          const matches = this._normalizeMenuSearchText(haystack).includes(normalizedQuery);
+          node.hidden = !matches;
+          if (matches) visibleCount += 1;
+        }
+        if (!visibleCount) {
+          this._showMenuNoResultsItem(popup);
+          return;
+        }
+        this._removeMenuNoResultsItem(popup);
+      };
+      const resetSearch = () => {
+        clearTimer();
+        if (searchField && "value" in searchField) searchField.value = "";
+        applyFilter("");
+      };
+      const onInput = () => {
+        clearTimer();
+        const query = String(searchField?.value || "");
+        applyFilter(query);
+      };
+      const onKeyDown = (event) => {
+        if (!event || event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
+        if (String(event.key || "") === "Escape") {
+          event.preventDefault();
+          event.stopPropagation();
+          resetSearch();
+        }
+      };
+      if (searchField?.addEventListener) {
+        searchField.addEventListener("input", onInput);
+        searchField.addEventListener("keydown", onKeyDown, true);
+      } else {
+        menulist.addEventListener("keydown", onKeyDown, true);
+      }
+      popup.addEventListener("popuphidden", resetSearch);
+      popup.addEventListener("popupshown", onInput);
+      popup.addEventListener("command", resetSearch);
+      if (displayValue) {
+        menulist.setAttribute("label", displayValue);
+        if (searchField && "value" in searchField) {
+          searchField.value = "";
+        }
+      }
+      setAllVisible();
+    }
+    _normalizeMenuSearchText(value) {
+      return this.abbrevService.normalizeKey(value || "");
+    }
+    _showMenuNoResultsItem(popup) {
+      if (!popup) return;
+      this._removeMenuNoResultsItem(popup);
+      const doc = popup.ownerDocument;
+      const item = doc.createXULElement("menuitem");
+      item.setAttribute("label", "No matches");
+      item.setAttribute("disabled", "true");
+      item.hidden = false;
+      item._ibcslmNoResults = true;
+      popup.appendChild(item);
+      popup._ibcslmNoResultsItem = item;
+    }
+    _removeMenuNoResultsItem(popup) {
+      const item = popup?._ibcslmNoResultsItem;
+      if (item?.parentNode) item.parentNode.removeChild(item);
+      if (popup?._ibcslmNoResultsItem) delete popup._ibcslmNoResultsItem;
+    }
     _getJurisdictionOptions(currentJurisdiction) {
-      const options = this.abbrevService.listAutoUSPlaceJurisdictions();
+      const options = this.abbrevService.listJurisdictionMenuOptions(currentJurisdiction);
       if (!currentJurisdiction) return options;
       if (options.some((option) => option.code === currentJurisdiction)) return options;
       return [{
@@ -1837,16 +3431,89 @@ ${mlzBlock}` : mlzBlock;
       if (!key) return "";
       return this.abbrevService.formatInstitutionPartDisplay(key, jurisdiction) || String(courtKey || "");
     }
+    _getStoredExtraPerson(item, extraPersonType) {
+      const creators = this.Jurisdiction.getMLZExtraCreatorsByType?.(item, extraPersonType.mlzType) || [];
+      return creators[0] || null;
+    }
+    _setStoredExtraPerson(item, extraPersonType, person) {
+      if (!item?.setField) return;
+      const extra = String(item.getField?.("extra") || "");
+      const nextExtra = this.Jurisdiction.updateMLZExtraCreators?.call(
+        this.Jurisdiction,
+        extra,
+        extraPersonType.mlzType,
+        person ? [person] : []
+      ) || extra;
+      if (nextExtra !== extra) {
+        item.setField("extra", nextExtra);
+      }
+    }
+    _formatStoredExtraPerson(person) {
+      if (!person || typeof person !== "object") return "";
+      if (person.name) return String(person.name).trim();
+      const firstName = String(person.firstName || "").trim();
+      const lastName = String(person.lastName || "").trim();
+      return `${firstName}${firstName && lastName ? " " : ""}${lastName}`.trim();
+    }
+    _extraPersonFromCreatorFields(fields) {
+      if (!fields || typeof fields !== "object") return null;
+      const fieldMode = Number(fields.fieldMode) || 0;
+      const firstName = String(fields.firstName || "").trim();
+      const lastName = String(fields.lastName || "").trim();
+      if (!firstName && !lastName) return null;
+      if (fieldMode === 1) {
+        return { name: lastName || firstName };
+      }
+      return { firstName, lastName };
+    }
+    _extraPersonToCreatorData(person) {
+      if (!person || typeof person !== "object") return null;
+      if (person.name) {
+        return {
+          firstName: "",
+          lastName: String(person.name || "").trim(),
+          fieldMode: 1
+        };
+      }
+      return {
+        firstName: String(person.firstName || "").trim(),
+        lastName: String(person.lastName || "").trim(),
+        fieldMode: 0
+      };
+    }
+    _getExtraPersonConfigByCreatorType(value) {
+      const normalized = String(value || "").trim().toLowerCase();
+      if (!normalized) return null;
+      return this._extraPersonTypes.find((config) => {
+        if (normalized === String(config.creatorTypeID).toLowerCase()) return true;
+        if (normalized === String(config.creatorTypeName).toLowerCase()) return true;
+        return config.key === "commenter" && normalized === String(config.label).toLowerCase();
+      }) || null;
+    }
+    _itemTypeSupportsExtraPerson(itemTypeID) {
+      return Zotero?.ItemTypes?.getName?.(itemTypeID) === "case";
+    }
     async _saveJurisdictionFromMenu(item, selectedCode) {
       try {
         const current = this.Jurisdiction.getMLZJurisdiction?.(item) || "";
         if (current === selectedCode) return;
         const extra = String(item.getField?.("extra") || "");
         const displayValue = this.abbrevService.formatJurisdictionDisplay(selectedCode);
-        const updatedExtra = this.Jurisdiction.updateMLZJurisdiction?.(extra, selectedCode, displayValue) || extra;
-        if (updatedExtra === extra) return;
-        item.setField("extra", updatedExtra);
+        let nextExtra = this.Jurisdiction.updateMLZJurisdiction?.(extra, selectedCode, displayValue) || extra;
+        nextExtra = this.Jurisdiction.updateMLZExtraField?.(nextExtra, "court", "") || nextExtra;
+        if (nextExtra === extra && String(item.getField?.("court") || "").trim() === "") return;
+        item.setField("extra", nextExtra);
+        item.setField("court", "");
         await item.saveTx({ skipDateModifiedUpdate: true });
+        try {
+          const infoBox = this._getActiveInfoBox?.();
+          if (infoBox) {
+            const courtRow = this._findInfoFieldRow(infoBox, "court");
+            if (courtRow) this._renderCourtField(infoBox);
+            this._renderCustomCourtField(infoBox);
+          }
+        } catch (e) {
+        }
         try {
           Zotero.debug(`[IndigoBook CSL-M] jurisdiction row saved: item=${String(item.id)} jurisdiction=${selectedCode}`);
         } catch (e) {
@@ -1879,6 +3546,16 @@ ${mlzBlock}` : mlzBlock;
           const displayValue = this.abbrevService.formatJurisdictionDisplay(targetJurisdiction);
           const updatedExtra = this.Jurisdiction.updateMLZJurisdiction?.(extra, targetJurisdiction, displayValue) || extra;
           item.setField("extra", updatedExtra);
+          const targetOptions = this.abbrevService.listInstitutionPartOptionsForJurisdictionTree(targetJurisdiction);
+          if (!targetOptions.length) {
+            item.setField("court", "");
+            await item.saveTx({ skipDateModifiedUpdate: true });
+            try {
+              Zotero.debug(`[IndigoBook CSL-M] court row cleared for jurisdiction with no institution-part: item=${String(item.id)} jurisdiction=${targetJurisdiction}`);
+            } catch (e) {
+            }
+            return;
+          }
         }
         item.setField("court", normalizedKey);
         await item.saveTx({ skipDateModifiedUpdate: true });
@@ -1937,6 +3614,7 @@ ${mlzBlock}` : mlzBlock;
           cslItem.jurisdiction = jur;
           cslItem.country = jur.split(":")[0];
           this._decorateShortForms(cslItem, jur);
+          this._logCitationItemData(cslItem, zotItem, "retrieveItem");
           this._logRenderProbeFromItem(cslItem, jur, "retrieveItem");
         } else {
           this._logField("missing-zotero-item", `id=${String(id)}`);
@@ -1965,6 +3643,8 @@ ${mlzBlock}` : mlzBlock;
     _hydrateCSLItemFromZotero(cslItem, zotItem) {
       try {
         const mlzFields = this.Jurisdiction.getMLZExtraFields?.(zotItem) || null;
+        const commenterCreators = this.Jurisdiction.getMLZExtraCreatorsByType?.(zotItem, "commenter") || [];
+        const translatorCreators = this.Jurisdiction.getMLZExtraCreatorsByType?.(zotItem, "translator") || [];
         if (!cslItem.title) {
           const title = zotItem.getField?.("title");
           if (title) cslItem.title = title;
@@ -1997,9 +3677,85 @@ ${mlzBlock}` : mlzBlock;
             cslItem.authority = [{ literal: this.abbrevService.normalizeKey(court) || court }];
           }
         }
+        if (!cslItem.commenter && commenterCreators.length) {
+          cslItem.commenter = commenterCreators.map((creator) => this._extraPersonToCSLCreator(creator)).filter((creator) => creator.literal || creator.given || creator.family);
+        }
+        if (!cslItem.translator && translatorCreators.length) {
+          cslItem.translator = translatorCreators.map((creator) => this._extraPersonToCSLCreator(creator)).filter((creator) => creator.literal || creator.given || creator.family);
+        }
+        const seeAlso = this._collectSeeAlsoURIs(cslItem, zotItem);
+        if (seeAlso.length) {
+          cslItem.seeAlso = seeAlso;
+        }
       } catch (e) {
         this._warnRetrieveItem(`hydrateCSLItemFromZotero failed: ${String(e)}`);
       }
+    }
+    _collectSeeAlsoURIs(cslItem, zotItem) {
+      const out = [];
+      const seen = /* @__PURE__ */ new Set();
+      const selfURI = this._getItemURI(zotItem);
+      const add = (value) => {
+        const normalized = this._resolveSeeAlsoEntryToURI(value, zotItem?.libraryID);
+        if (!normalized) return;
+        if (selfURI && normalized === selfURI) return;
+        if (seen.has(normalized)) return;
+        seen.add(normalized);
+        out.push(normalized);
+      };
+      try {
+        const existingSeeAlso = Array.isArray(cslItem?.seeAlso) ? cslItem.seeAlso : [];
+        for (const entry of existingSeeAlso) {
+          add(entry);
+        }
+        const relatedKeys = Array.isArray(zotItem?.relatedItems) ? zotItem.relatedItems : [];
+        for (const key of relatedKeys) {
+          const relatedItem = Zotero.Items.getByLibraryAndKey?.(zotItem.libraryID, key);
+          add(relatedItem);
+        }
+        const relatedPredicate = Zotero.Relations?.relatedItemPredicate;
+        const relatedURIs = relatedPredicate ? zotItem?.getRelationsByPredicate?.(relatedPredicate) || [] : [];
+        for (const uri of relatedURIs) {
+          add(uri);
+        }
+      } catch (e) {
+        this._warnRetrieveItem(`collectSeeAlsoURIs failed: ${String(e)}`);
+      }
+      return out;
+    }
+    _resolveSeeAlsoEntryToURI(value, libraryID = null) {
+      if (value == null) return null;
+      if (typeof value === "object") {
+        const directURI = this._getItemURI(value);
+        if (directURI) return directURI;
+        if ("key" in value && libraryID != null) {
+          const relatedItem = Zotero.Items.getByLibraryAndKey?.(libraryID, value.key);
+          return this._getItemURI(relatedItem);
+        }
+        return null;
+      }
+      const raw = String(value).trim();
+      if (!raw) return null;
+      if (/^https?:\/\/zotero\.org\//i.test(raw)) return raw;
+      if (/^\d+$/.test(raw)) return this._getItemURI(Zotero.Items.get?.(Number(raw)));
+      if (/^[A-Z0-9]{8}$/i.test(raw) && libraryID != null) return this._getItemURI(Zotero.Items.getByLibraryAndKey?.(libraryID, raw));
+      return raw;
+    }
+    _getItemURI(item) {
+      if (!item) return null;
+      try {
+        return Zotero.URI?.getItemURI?.(item) || null;
+      } catch (e) {
+      }
+      return null;
+    }
+    _extraPersonToCSLCreator(person) {
+      const literalName = String(person?.name || "").trim();
+      if (literalName) return { literal: literalName };
+      return {
+        given: String(person?.firstName || "").trim(),
+        family: String(person?.lastName || "").trim()
+      };
     }
     _decorateShortForms(cslItem, jur) {
       try {
@@ -2193,13 +3949,19 @@ ${mlzBlock}` : mlzBlock;
       const self = this;
       sysProto.loadJurisdictionStyle = function(jurisdiction, variantName) {
         const xml = self.moduleLoader.loadJurisdictionStyleSync(jurisdiction, variantName);
-        if (xml) return xml;
+        if (xml) {
+          self._logJurisdictionModuleLoad("loadJurisdictionStyle", jurisdiction, variantName, xml);
+          return xml;
+        }
         if (self._orig.loadJurisdictionStyle) return self._orig.loadJurisdictionStyle.call(this, jurisdiction, variantName);
         return null;
       };
       sysProto.retrieveStyleModule = function(jurisdiction, variantName) {
         const xml = self.moduleLoader.loadJurisdictionStyleSync(jurisdiction, variantName);
-        if (xml) return xml;
+        if (xml) {
+          self._logJurisdictionModuleLoad("retrieveStyleModule", jurisdiction, variantName, xml);
+          return xml;
+        }
         if (self._orig.retrieveStyleModule) return self._orig.retrieveStyleModule.call(this, jurisdiction, variantName);
         return null;
       };
@@ -2242,6 +4004,18 @@ ${mlzBlock}` : mlzBlock;
       if (!citeproc || typeof citeproc !== "object") return citeproc;
       if (citeproc.__indigoRenderProbeInstrumented) return citeproc;
       citeproc.__indigoRenderProbeInstrumented = true;
+      this._logCiteprocEngineDetails(citeproc);
+      this._instrumentParallelLifecycle(citeproc);
+      try {
+        const availableAbbrevDomains = this.abbrevService?.getAvailableAbbrevDomains?.();
+        if (citeproc.opt && availableAbbrevDomains && Object.keys(availableAbbrevDomains).length) {
+          citeproc.opt.availableAbbrevDomains = {
+            ...citeproc.opt.availableAbbrevDomains || {},
+            ...availableAbbrevDomains
+          };
+        }
+      } catch (e) {
+      }
       try {
         const methodList = [
           "processCitationCluster",
@@ -2254,6 +4028,7 @@ ${mlzBlock}` : mlzBlock;
         Zotero.debug(`[IndigoBook CSL-M] renderProbe citeproc instrumentation: methods=${available || "none"}`);
       } catch (e) {
       }
+      this._instrumentParallelTracker(citeproc);
       const wrap = (methodName) => {
         const orig = citeproc?.[methodName];
         if (typeof orig !== "function") return;
@@ -2278,21 +4053,119 @@ ${mlzBlock}` : mlzBlock;
       wrap("updateItems");
       return citeproc;
     }
+    _instrumentParallelLifecycle(citeproc) {
+      const wrap = (methodName) => {
+        const orig = citeproc?.[methodName];
+        if (typeof orig !== "function") return;
+        const marker = `__indigoParallelLifecycle_${methodName}`;
+        if (citeproc[marker]) return;
+        citeproc[marker] = true;
+        const self = this;
+        citeproc[methodName] = function(...args) {
+          self._logParallelLifecycle(citeproc, `${methodName}:before`, args);
+          try {
+            const result = orig.apply(this, args);
+            self._logParallelLifecycle(citeproc, `${methodName}:after`, args, result);
+            return result;
+          } catch (e) {
+            self._logParallelLifecycle(citeproc, `${methodName}:error`, args, e);
+            throw e;
+          }
+        };
+      };
+      wrap("retrieveAllStyleModules");
+      wrap("loadStyleModule");
+      wrap("buildTokenLists");
+      wrap("configureTokenList");
+    }
+    _logCiteprocEngineDetails(citeproc) {
+      try {
+        const ctorName = String(citeproc?.constructor?.name || "unknown");
+        const prefRs = Zotero.Prefs?.get?.("cite.useCiteprocRs");
+        const parallelEnabled = citeproc?.opt?.parallel?.enable;
+        const trackRepeat = Object.keys(citeproc?.opt?.track_repeat || {});
+        const hasParallelTracker = !!citeproc?.parallel;
+        const msg = `[IndigoBook CSL-M] citeproc engine: ctor=${ctorName} citeprocRsPref=${String(!!prefRs)} hasParallelTracker=${String(hasParallelTracker)} parallelEnabled=${String(!!parallelEnabled)} trackRepeat=${trackRepeat.join("|") || "none"}`;
+        Zotero.debug(msg);
+        Zotero.logError(msg);
+      } catch (e) {
+      }
+    }
+    _logParallelLifecycle(citeproc, stage, args, resultOrError = void 0) {
+      try {
+        const parallel = citeproc?.opt?.parallel || {};
+        const trackRepeat = Object.keys(citeproc?.opt?.track_repeat || {});
+        const argSummary = this._summarizeParallelLifecycleArgs(stage, args);
+        let tail = "";
+        if (stage.endsWith(":error")) {
+          tail = ` error=${String(resultOrError)}`;
+        } else if (stage.endsWith(":after")) {
+          tail = ` result=${this._summarizeParallelLifecycleResult(resultOrError)}`;
+        }
+        const msg = `[IndigoBook CSL-M] citeproc parallel lifecycle(${stage}): enabled=${String(!!parallel.enable)} parallelKeys=${Object.keys(parallel).join("|") || "none"} trackRepeat=${trackRepeat.join("|") || "none"} ${argSummary}${tail}`;
+        Zotero.debug(msg);
+        Zotero.logError(msg);
+      } catch (e) {
+      }
+    }
+    _summarizeParallelLifecycleArgs(stage, args) {
+      try {
+        if (stage.startsWith("retrieveAllStyleModules")) {
+          return `jurisdictions=${JSON.stringify(args?.[0] || null)}`;
+        }
+        if (stage.startsWith("loadStyleModule")) {
+          const xml = typeof args?.[1] === "string" ? args[1] : "";
+          return `jurisdiction=${String(args?.[0] || "")} hasXml=${String(!!xml)} xmlParallelAttrs=${String(/parallel-(first|last|last-to-first|delimiter-override)\s*=/.test(xml))} skipFallback=${String(!!args?.[2])}`;
+        }
+        if (stage.startsWith("buildTokenLists")) {
+          const node = args?.[0];
+          const target = args?.[1];
+          const nodeName = String(node?.name || node?.nodeName || node?.tokentype || "");
+          const targetKeys = target && typeof target === "object" ? Object.keys(target).slice(0, 6).join("|") : "none";
+          return `node=${nodeName || "unknown"} targetKeys=${targetKeys}`;
+        }
+        if (stage.startsWith("configureTokenList")) {
+          const tokens = args?.[0];
+          const tokenCount = Array.isArray(tokens) ? tokens.length : -1;
+          const tokenNames = Array.isArray(tokens) ? tokens.slice(0, 5).map((token) => String(token?.name || token?.tokentype || "")).join("|") : "none";
+          return `tokenCount=${String(tokenCount)} tokenNames=${tokenNames || "none"}`;
+        }
+      } catch (e) {
+      }
+      return "args=unavailable";
+    }
+    _summarizeParallelLifecycleResult(result) {
+      if (Array.isArray(result)) return `array(${result.length})`;
+      if (result && typeof result === "object") return `object(${Object.keys(result).slice(0, 6).join("|")})`;
+      return String(result);
+    }
+    _logJurisdictionModuleLoad(hookName, jurisdiction, variantName, xml) {
+      try {
+        const hasParallelFirst = /parallel-first\s*=/.test(xml);
+        const hasParallelLast = /parallel-last\s*=/.test(xml);
+        const hasParallelLastToFirst = /parallel-last-to-first\s*=/.test(xml);
+        const hasParallelDelimiter = /parallel-delimiter-override\s*=/.test(xml);
+        const msg = `[IndigoBook CSL-M] jurisdiction module(${hookName}): jurisdiction=${String(jurisdiction || "")} variant=${String(variantName || "")} parallel-first=${String(hasParallelFirst)} parallel-last=${String(hasParallelLast)} parallel-last-to-first=${String(hasParallelLastToFirst)} parallel-delimiter=${String(hasParallelDelimiter)}`;
+        Zotero.debug(msg);
+        Zotero.logError(msg);
+      } catch (e) {
+      }
+    }
     _logCitationBranchProbe(methodName, citation) {
       try {
         const items = this._extractCitationItems(citation);
         if (!Array.isArray(items) || !items.length) return;
         for (const citationItem of items) {
           const itemID = citationItem?.id ?? citationItem?.itemID ?? citationItem?.itemId ?? null;
-          if (!this._isHarvardCRCLFromItemID(itemID)) continue;
           const pos = citationItem?.position;
           const nearNote = !!(citationItem?.["near-note"] || citationItem?.nearNote);
           const hasLocator = citationItem?.locator != null && String(citationItem.locator).trim() !== "";
+          const label = String(citationItem?.label || "");
           let branch = "full";
           if (pos === 2 || pos === "ibid-with-locator") branch = "ibid-with-locator";
           else if (pos === 1 || pos === "ibid") branch = "ibid";
           else if (nearNote || pos === 3 || pos === "subsequent") branch = "short";
-          const msg = `[IndigoBook CSL-M] renderProbe citeproc(${methodName}): branch=${branch} position=${String(pos)} near-note=${String(nearNote)} locator=${String(citationItem?.locator || "")} itemID=${String(itemID)}`;
+          const msg = `[IndigoBook CSL-M] renderProbe citeproc(${methodName}): branch=${branch} position=${String(pos)} near-note=${String(nearNote)} locator=${String(citationItem?.locator || "")} label=${label} has-locator=${String(hasLocator)} itemID=${String(itemID)}`;
           Zotero.debug(msg);
           Zotero.logError(msg);
         }
@@ -2312,6 +4185,7 @@ ${mlzBlock}` : mlzBlock;
     _logCiteprocMethodStart(methodName, args) {
       try {
         const items = this._extractCitationItems(args?.[0]);
+        this._logCitationRequestPayload(methodName, items, args);
         const ids = items.map((citationItem) => citationItem?.id ?? citationItem?.itemID ?? citationItem?.itemId ?? null).filter((id) => id != null).map((id) => String(id)).join(",");
         Zotero.debug(`[IndigoBook CSL-M] renderProbe citeproc start(${methodName}): args=${String(args?.length || 0)} ids=${ids || "none"}`);
       } catch (e) {
@@ -2336,15 +4210,107 @@ ${mlzBlock}` : mlzBlock;
       } catch (e) {
       }
     }
-    _isHarvardCRCLFromItemID(id) {
+    _instrumentParallelTracker(citeproc) {
       try {
-        const zotItem = this._getZoteroItemByAnyID(id);
-        if (!zotItem) return false;
-        const containerTitle = zotItem.getField?.("publicationTitle") || zotItem.getField?.("reporter") || zotItem.getField?.("report") || "";
-        return this._isHarvardCRCL(containerTitle);
+        const startCitation = citeproc?.parallel?.StartCitation;
+        if (typeof startCitation !== "function") return;
+        if (citeproc.parallel.__indigoStartCitationInstrumented) return;
+        citeproc.parallel.__indigoStartCitationInstrumented = true;
+        const self = this;
+        citeproc.parallel.StartCitation = function(...args) {
+          try {
+            self._logParallelStartCitation(args?.[0], this?.state);
+          } catch (e) {
+          }
+          return startCitation.apply(this, args);
+        };
       } catch (e) {
       }
-      return false;
+    }
+    _logCitationItemData(cslItem, zotItem, stage) {
+      if (this._citationDataLogCount >= this._maxCitationDataLogs) return;
+      this._citationDataLogCount += 1;
+      try {
+        const payload = {
+          id: cslItem?.id ?? null,
+          zoteroID: zotItem?.id ?? null,
+          key: zotItem?.key ?? null,
+          type: cslItem?.type ?? null,
+          title: cslItem?.title ?? null,
+          jurisdiction: cslItem?.jurisdiction ?? null,
+          authority: cslItem?.authority ?? null,
+          "container-title": cslItem?.["container-title"] ?? null,
+          "container-title-short": cslItem?.["container-title-short"] ?? null,
+          "title-short": cslItem?.["title-short"] ?? null,
+          seeAlso: Array.isArray(cslItem?.seeAlso) ? cslItem.seeAlso : []
+        };
+        const msg = `[IndigoBook CSL-M] citation itemData[${this._citationDataLogCount}] ${stage}: ${JSON.stringify(payload)}`;
+        Zotero.debug(msg);
+        Zotero.logError(msg);
+      } catch (e) {
+      }
+    }
+    _logCitationRequestPayload(methodName, items, args) {
+      if (!Array.isArray(items) || !items.length) return;
+      if (this._citationDataLogCount >= this._maxCitationDataLogs) return;
+      try {
+        const payload = items.map((citationItem) => ({
+          id: citationItem?.id ?? citationItem?.itemID ?? citationItem?.itemId ?? null,
+          locator: citationItem?.locator ?? null,
+          label: citationItem?.label ?? null,
+          position: citationItem?.position ?? null,
+          "near-note": citationItem?.["near-note"] ?? citationItem?.nearNote ?? null,
+          prefix: citationItem?.prefix ?? null,
+          suffix: citationItem?.suffix ?? null
+        }));
+        const msg = `[IndigoBook CSL-M] citation request(${methodName}): items=${JSON.stringify(payload)} arg-shape=${String(args?.length || 0)}`;
+        Zotero.debug(msg);
+        Zotero.logError(msg);
+      } catch (e) {
+      }
+    }
+    _logParallelStartCitation(sortedItems, state) {
+      if (!Array.isArray(sortedItems) || !sortedItems.length) return;
+      try {
+        const payload = sortedItems.map((entry) => ({
+          item: {
+            id: entry?.[0]?.id ?? null,
+            title: entry?.[0]?.title ?? null,
+            authority: this._summarizeParallelValue(entry?.[0]?.authority),
+            number: this._summarizeParallelValue(entry?.[0]?.number),
+            seeAlso: Array.isArray(entry?.[0]?.seeAlso) ? entry[0].seeAlso : []
+          },
+          citationItem: {
+            id: entry?.[1]?.id ?? entry?.[1]?.itemID ?? entry?.[1]?.itemId ?? null,
+            locator: entry?.[1]?.locator ?? null,
+            position: entry?.[1]?.position ?? null,
+            parallel: entry?.[1]?.parallel ?? null
+          }
+        }));
+        const suppressRepeats = Array.isArray(state?.tmp?.suppress_repeats) ? state.tmp.suppress_repeats : [];
+        const msg = `[IndigoBook CSL-M] parallel StartCitation: sortedItems=${JSON.stringify(payload)} suppressRepeats=${JSON.stringify(suppressRepeats)}`;
+        Zotero.debug(msg);
+        Zotero.logError(msg);
+      } catch (e) {
+      }
+    }
+    _summarizeParallelValue(value) {
+      if (value == null) return null;
+      if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+        return value;
+      }
+      if (Array.isArray(value)) {
+        return value.map((entry) => this._summarizeParallelValue(entry));
+      }
+      if (typeof value === "object") {
+        const out = {};
+        for (const key of ["literal", "family", "given", "name", "year"]) {
+          if (value[key] != null) out[key] = value[key];
+        }
+        if (Object.keys(out).length) return out;
+        return JSON.stringify(value);
+      }
+      return String(value);
     }
     _getStyleXMLSync(styleObj) {
       if (styleObj._xml) return styleObj._xml;
@@ -2494,7 +4460,10 @@ ${mlzBlock}` : mlzBlock;
       this._config = null;
     }
     async preload() {
-      this._config = await this.dataStore.loadJSON("data/case-jurisdiction-map.json").catch(() => null);
+      this._config = await this.dataStore.loadJSONAny([
+        "juris-maps/case-jurisdiction-map.json",
+        "data/case-jurisdiction-map.json"
+      ]);
     }
     mapCaseCourt(rawCourt) {
       const source = String(rawCourt || "").trim();
@@ -2628,6 +4597,7 @@ ${mlzBlock}` : mlzBlock;
 
   // lib/main.mjs
   var _ctx;
+  var LEGACY_COMMENTER_INFO_ROW_ID = "indigobook-cslm-commenter-row";
   var BUNDLED_STYLE_FILES = [
     "jm-indigobook.csl",
     "jm-indigobook-law-review.csl"
@@ -2644,6 +4614,22 @@ ${mlzBlock}` : mlzBlock;
   function _styleInstallSourceURL(rootURI, relPath) {
     const base = rootURI?.spec || "";
     return base ? `${base}${relPath}` : relPath;
+  }
+  function _diagnostic(message) {
+    try {
+      Zotero.debug(message);
+    } catch (e) {
+    }
+    try {
+      Zotero.logError(message);
+    } catch (e) {
+    }
+  }
+  function _unregisterLegacyCommenterInfoRow() {
+    try {
+      Zotero?.ItemPaneManager?.unregisterInfoRow?.(LEGACY_COMMENTER_INFO_ROW_ID);
+    } catch (e) {
+    }
   }
   async function _installStyleIfMissing({ rootURI, dataStore, relPath }) {
     const styleXML = await dataStore.loadText(relPath);
@@ -2747,6 +4733,8 @@ ${mlzBlock}` : mlzBlock;
     }
   }
   async function activate({ id, version, rootURI }) {
+    _diagnostic(`[IndigoBook CSL-M] activate begin id=${String(id)} version=${String(version)}`);
+    const locale = Zotero?.locale || "en-US";
     _ctx = {
       id,
       version,
@@ -2761,11 +4749,11 @@ ${mlzBlock}` : mlzBlock;
     await _ctx.data.init();
     await _ensureBundledStylesInstalled({ rootURI, dataStore: _ctx.data });
     await _ensureBundledTranslatorsInstalled({ dataStore: _ctx.data });
-    _ctx.modules = new ModuleLoader({ rootURI, dataStore: _ctx.data });
+    _ctx.modules = new ModuleLoader({ rootURI, dataStore: _ctx.data, locale });
     await _ctx.modules.preload();
-    _ctx.abbrevs = new AbbrevService({ dataStore: _ctx.data });
+    _ctx.abbrevs = new AbbrevService({ dataStore: _ctx.data, locale });
     await _ctx.abbrevs.preload();
-    _ctx.caseCourtMapper = new CaseCourtMapper({ dataStore: _ctx.data });
+    _ctx.caseCourtMapper = new CaseCourtMapper({ dataStore: _ctx.data, locale });
     await _ctx.caseCourtMapper.preload();
     _ctx.patcher = new Patcher({
       moduleLoader: _ctx.modules,
@@ -2779,7 +4767,24 @@ ${mlzBlock}` : mlzBlock;
       rootURI
     });
     await _ctx.prefsUI.register();
+    _unregisterLegacyCommenterInfoRow();
+    try {
+      delete Zotero.IndigoBookCSLMCommenterRowID;
+    } catch (e) {
+    }
     Zotero.IndigoBookCSLMBridge = {
+      listPrimaryDatasetOptions() {
+        return _ctx?.abbrevs?.listPrimaryDatasetOptions?.() || [];
+      },
+      listSecondaryDatasetOptions() {
+        return _ctx?.abbrevs?.listSecondaryDatasetOptions?.() || [];
+      },
+      listJurisdictionDatasetOptions() {
+        return _ctx?.abbrevs?.listJurisdictionDatasetOptions?.() || [];
+      },
+      listPrimaryAbbreviations(dataset = "primary-us") {
+        return _ctx?.abbrevs?.listPrimaryAbbreviations?.(dataset) || [];
+      },
       listSecondaryAbbreviations(dataset = "secondary-us-bluebook") {
         return _ctx?.abbrevs?.listSecondaryContainerTitleAbbreviations?.(dataset) || [];
       },
@@ -2800,8 +4805,18 @@ ${mlzBlock}` : mlzBlock;
         _ctx?.abbrevs?.resetSecondaryContainerTitleOverrides?.(dataset);
         return true;
       },
-      listJurisdictionPreferenceEntries() {
-        return _ctx?.abbrevs?.listJurisdictionPreferenceEntries?.() || [];
+      upsertPrimaryAbbreviation(dataset, jurisdiction, category, key, value) {
+        return !!_ctx?.abbrevs?.upsertPrimaryAbbreviation?.(dataset, jurisdiction, category, key, value);
+      },
+      removePrimaryAbbreviation(dataset, jurisdiction, category, key) {
+        return !!_ctx?.abbrevs?.removePrimaryAbbreviation?.(dataset, jurisdiction, category, key);
+      },
+      resetPrimaryAbbreviations(dataset = "primary-us") {
+        _ctx?.abbrevs?.resetPrimaryAbbreviations?.(dataset);
+        return true;
+      },
+      listJurisdictionPreferenceEntries(dataset = null) {
+        return _ctx?.abbrevs?.listJurisdictionPreferenceEntries?.(dataset) || [];
       },
       upsertJurisdictionPreferenceEntry(dataset, jurisdiction, category, key, value) {
         return !!_ctx?.abbrevs?.upsertJurisdictionPreferenceEntry?.(dataset, jurisdiction, category, key, value);
@@ -2809,22 +4824,38 @@ ${mlzBlock}` : mlzBlock;
       removeJurisdictionPreferenceEntry(dataset, jurisdiction, category, key) {
         return !!_ctx?.abbrevs?.removeJurisdictionPreferenceEntry?.(dataset, jurisdiction, category, key);
       },
-      resetJurisdictionPreferenceOverrides() {
-        _ctx?.abbrevs?.resetJurisdictionPreferenceOverrides?.();
+      resetJurisdictionPreferenceOverrides(dataset = null) {
+        _ctx?.abbrevs?.resetJurisdictionPreferenceOverrides?.(dataset);
         return true;
+      },
+      importOverrides(kind, dataset, payload) {
+        return _ctx?.abbrevs?.importOverrides?.(kind, dataset, payload) || {
+          added: 0,
+          updated: 0,
+          skipped: 0,
+          error: "Import bridge unavailable.",
+          skipReasons: []
+        };
       }
     };
-    Zotero.debug(`[IndigoBook CSL-M] activated v${version}`);
+    _diagnostic(`[IndigoBook CSL-M] activated v${version}`);
   }
   async function deactivate() {
     try {
+      _diagnostic("[IndigoBook CSL-M] deactivate begin");
       try {
         delete Zotero.IndigoBookCSLMBridge;
+      } catch (e) {
+      }
+      _unregisterLegacyCommenterInfoRow();
+      try {
+        delete Zotero.IndigoBookCSLMCommenterRowID;
       } catch (e) {
       }
       _ctx?.prefsUI?.unregister?.();
       _ctx?.patcher?.unpatch();
     } finally {
+      _diagnostic("[IndigoBook CSL-M] deactivate complete");
       _ctx = null;
     }
   }

@@ -1,0 +1,12 @@
+{
+  "filename": "auto-eec.int.json",
+  "name": "European Economic Community",
+  "version": "2026-07-08 20:45:38 UTC",
+  "xdata": {
+    "default": {
+      "place": {
+        "EEC.INT": "European Economic Community"
+      }
+    }
+  }
+}

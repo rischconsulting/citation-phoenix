@@ -1,0 +1,12 @@
+{
+  "filename": "auto-bj.json",
+  "name": "Benin",
+  "version": "2026-07-08 20:45:38 UTC",
+  "xdata": {
+    "default": {
+      "place": {
+        "BJ": "Benin"
+      }
+    }
+  }
+}

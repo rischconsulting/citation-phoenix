@@ -1,0 +1,12 @@
+{
+  "filename": "auto-nr.json",
+  "name": "Nauru",
+  "version": "2026-07-08 20:45:39 UTC",
+  "xdata": {
+    "default": {
+      "place": {
+        "NR": "Nauru"
+      }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "filename": "auto-cv.json",
+  "name": "Cape Verde",
+  "version": "2026-07-08 20:45:38 UTC",
+  "xdata": {
+    "default": {
+      "place": {
+        "CV": "Cape Verde"
+      }
+    }
+  }
+}

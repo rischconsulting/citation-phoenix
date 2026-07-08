@@ -1,1 +1,5 @@
 *.xpi
+*.zip
+jurism-zotero/
+juris-source-cache/
+scripts/sync-juris-assets-backup/

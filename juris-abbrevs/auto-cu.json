@@ -1,0 +1,12 @@
+{
+  "filename": "auto-cu.json",
+  "name": "Cuba",
+  "version": "2026-07-08 20:45:38 UTC",
+  "xdata": {
+    "default": {
+      "place": {
+        "CU": "Cuba"
+      }
+    }
+  }
+}

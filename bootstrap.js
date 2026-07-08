@@ -5,8 +5,14 @@ function logError(prefix, e) {
   try { Zotero.debug(prefix + ": " + e); } catch (_) {}
 }
 
+function logDiagnostic(message) {
+  try { Zotero.debug(message); } catch (_) {}
+  try { Zotero.logError(message); } catch (_) {}
+}
+
 async function startup({ id, version, rootURI }, reason) {
   try {
+    logDiagnostic(`[IndigoBook CSL-M] bootstrap startup begin id=${String(id)} version=${String(version)} reason=${String(reason)}`);
     // 1) Normalize rootURI into a string base
     var base = (rootURI && typeof rootURI === "object" && rootURI.spec)
       ? rootURI.spec
@@ -31,6 +37,7 @@ async function startup({ id, version, rootURI }, reason) {
 
     // 5) Activate using the root object (with .spec)
     await Zotero.IndigoBookCSLM.activate({ id, version, rootURI: root });
+    logDiagnostic(`[IndigoBook CSL-M] bootstrap startup success id=${String(id)} version=${String(version)}`);
   } catch (e) {
     logError("IndigoBook CSL-M plugin startup failed", e);
   }
@@ -40,9 +47,11 @@ async function startup({ id, version, rootURI }, reason) {
 
 async function shutdown({ id }, reason) {
   try {
+    logDiagnostic(`[IndigoBook CSL-M] bootstrap shutdown begin id=${String(id)} reason=${String(reason)}`);
     if (Zotero?.IndigoBookCSLM?.deactivate) {
       await Zotero.IndigoBookCSLM.deactivate();
     }
+    logDiagnostic(`[IndigoBook CSL-M] bootstrap shutdown success id=${String(id)}`);
   } catch (e) {
     logError("IndigoBook CSL-M plugin shutdown failed", e);
   } finally {

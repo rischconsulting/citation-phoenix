@@ -1,0 +1,12 @@
+{
+  "filename": "auto-ps.json",
+  "name": "Palestinian Territory",
+  "version": "2026-07-08 20:45:39 UTC",
+  "xdata": {
+    "default": {
+      "place": {
+        "PS": "Palestinian Territory"
+      }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "filename": "auto-bf.json",
+  "name": "Burkina Faso",
+  "version": "2026-07-08 20:45:38 UTC",
+  "xdata": {
+    "default": {
+      "place": {
+        "BF": "Burkina Faso"
+      }
+    }
+  }
+}

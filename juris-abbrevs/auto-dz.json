@@ -1,0 +1,12 @@
+{
+  "filename": "auto-dz.json",
+  "name": "Algeria",
+  "version": "2026-07-08 20:45:38 UTC",
+  "xdata": {
+    "default": {
+      "place": {
+        "DZ": "Algeria"
+      }
+    }
+  }
+}

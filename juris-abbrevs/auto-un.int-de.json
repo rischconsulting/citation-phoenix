@@ -1,0 +1,27 @@
+{
+  "filename": "auto-un.int-de.json",
+  "name": "United Nations",
+  "version": "2026-07-08 20:45:39 UTC",
+  "xdata": {
+    "default": {
+      "place": {
+        "UN.INT": "United Nations",
+        "UN.INT:UNHRC": "Human Rights Committee"
+      }
+    },
+    "un.int": {
+      "institution-part": {
+        "icj": "IGH",
+        "ictr": "International Criminal Tribunal for Rwanda",
+        "icty": "International Criminal Tribunal for the Former Yugoslavia",
+        "itlos": "ISGH",
+        "pca": "PCA"
+      }
+    },
+    "un.int:unhrc": {
+      "institution-part": {
+        "unhrc": "UNHRC"
+      }
+    }
+  }
+}

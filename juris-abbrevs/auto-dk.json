@@ -1,0 +1,229 @@
+{
+  "filename": "auto-dk.json",
+  "name": "Denmark",
+  "version": "2026-07-08 20:45:38 UTC",
+  "xdata": {
+    "default": {
+      "place": {
+        "DK": "Denmark",
+        "DK:COPENHAGEN": "Copenhagen",
+        "DK:COPENHAGEN:BORNHOLM": "Bornholm",
+        "DK:COPENHAGEN:COPENHAGEN": "Copenhagen",
+        "DK:COPENHAGEN:ELSINORE": "Elsinore",
+        "DK:COPENHAGEN:FREDERIKSBERG": "Frederiksberg",
+        "DK:COPENHAGEN:GLOSTRUP": "Glostrup",
+        "DK:COPENHAGEN:HILLEROD": "Hillerød",
+        "DK:COPENHAGEN:HOLBAEK": "Holbæk",
+        "DK:COPENHAGEN:LYNGBY": "Lyngby",
+        "DK:COPENHAGEN:NYKOBING.FALSTER": "Nykøbing Falster",
+        "DK:COPENHAGEN:ODENSE": "Odense",
+        "DK:COPENHAGEN:ROSKILDE": "Roskilde",
+        "DK:COPENHAGEN:SVENDBORG": "Svendborg",
+        "DK:COPENHAGEN:TORSHAVEN": "Tórshaven",
+        "DK:NUUK": "Nuuk",
+        "DK:NUUK:KUJALLEQ": "Kujalleq",
+        "DK:NUUK:QAASUITSOQ": "Qaasuitsoq",
+        "DK:NUUK:QEQQA": "Qeqqa",
+        "DK:NUUK:SERMERSOOQ": "Sermersooq",
+        "DK:VIBORG": "Viborg",
+        "DK:VIBORG:AALBORG": "Aalborg",
+        "DK:VIBORG:AARHUS": "Aarhus",
+        "DK:VIBORG:GRENAA": "Grenaa",
+        "DK:VIBORG:HADERSLEV": "Haderslev",
+        "DK:VIBORG:HERNING": "Herning",
+        "DK:VIBORG:HJORRING": "Hjørring",
+        "DK:VIBORG:HOBRO": "Hobro",
+        "DK:VIBORG:HOLSTEBRO": "Holstebro",
+        "DK:VIBORG:HORSENS": "Horsens",
+        "DK:VIBORG:RANDERS": "Randers",
+        "DK:VIBORG:SONDERBORG": "Sønderborg",
+        "DK:VIBORG:THISTED": "Thisted",
+        "DK:VIBORG:TONDER": "Tønder",
+        "DK:VIBORG:VIBORG": "Viborg"
+      }
+    },
+    "dk": {
+      "institution-part": {
+        "lrc": "Tinglysningsretten",
+        "mcc": "Sø- og Handelsretten",
+        "sc": "H",
+        "om": "Ombudsmanden",
+        "neab": "Natur-og Miljøklagenævnet",
+        "tc": "Landsskatteretten",
+        "rab": "Refugee Appeals Board"
+      }
+    },
+    "dk:copenhagen": {
+      "institution-part": {
+        "ehc": "Østre Landsret",
+        "mcc": "Sø- og Handelsretten"
+      }
+    },
+    "dk:copenhagen:bornholm": {
+      "institution-part": {
+        "dc": "Bornholm Byret"
+      }
+    },
+    "dk:copenhagen:copenhagen": {
+      "institution-part": {
+        "dc": "Copenhagen Byret"
+      }
+    },
+    "dk:copenhagen:elsinore": {
+      "institution-part": {
+        "dc": "Elsinore Byret"
+      }
+    },
+    "dk:copenhagen:frederiksberg": {
+      "institution-part": {
+        "dc": "Frederiksberg Byret"
+      }
+    },
+    "dk:copenhagen:glostrup": {
+      "institution-part": {
+        "dc": "Glostrup Byret"
+      }
+    },
+    "dk:copenhagen:hillerod": {
+      "institution-part": {
+        "dc": "Hillerød Byret"
+      }
+    },
+    "dk:copenhagen:holbaek": {
+      "institution-part": {
+        "dc": "Holbæk Byret"
+      }
+    },
+    "dk:copenhagen:lyngby": {
+      "institution-part": {
+        "dc": "Lyngby Byret"
+      }
+    },
+    "dk:copenhagen:nykobing.falster": {
+      "institution-part": {
+        "dc": "Nykøbing Falster Byret"
+      }
+    },
+    "dk:copenhagen:odense": {
+      "institution-part": {
+        "dc": "Odense Byret"
+      }
+    },
+    "dk:copenhagen:roskilde": {
+      "institution-part": {
+        "dc": "Roskilde Byret"
+      }
+    },
+    "dk:copenhagen:svendborg": {
+      "institution-part": {
+        "dc": "Svendborg Byret"
+      }
+    },
+    "dk:copenhagen:torshaven": {
+      "institution-part": {
+        "dc": "Tórshaven Byret"
+      }
+    },
+    "dk:nuuk": {
+      "institution-part": {
+        "dc": "Nuuk Byret",
+        "ghc": "Grønlands Landsret"
+      }
+    },
+    "dk:nuuk:kujalleq": {
+      "institution-part": {
+        "cc": "Kredsret"
+      }
+    },
+    "dk:nuuk:qaasuitsoq": {
+      "institution-part": {
+        "cc": "Kredsret"
+      }
+    },
+    "dk:nuuk:qeqqa": {
+      "institution-part": {
+        "cc": "Kredsret"
+      }
+    },
+    "dk:nuuk:sermersooq": {
+      "institution-part": {
+        "cc": "Kredsret"
+      }
+    },
+    "dk:viborg": {
+      "institution-part": {
+        "whc": "Vestre Landsret"
+      }
+    },
+    "dk:viborg:aalborg": {
+      "institution-part": {
+        "dc": "Aalborg Byret"
+      }
+    },
+    "dk:viborg:aarhus": {
+      "institution-part": {
+        "dc": "Aarhus Byret"
+      }
+    },
+    "dk:viborg:grenaa": {
+      "institution-part": {
+        "dc": "Grenaa Byret"
+      }
+    },
+    "dk:viborg:haderslev": {
+      "institution-part": {
+        "dc": "Haderslev Byret"
+      }
+    },
+    "dk:viborg:herning": {
+      "institution-part": {
+        "dc": "Herning Byret"
+      }
+    },
+    "dk:viborg:hjorring": {
+      "institution-part": {
+        "dc": "Hjørring Byret"
+      }
+    },
+    "dk:viborg:hobro": {
+      "institution-part": {
+        "lrc": "Tinglysningsretten"
+      }
+    },
+    "dk:viborg:holstebro": {
+      "institution-part": {
+        "dc": "Holstebro Byret"
+      }
+    },
+    "dk:viborg:horsens": {
+      "institution-part": {
+        "dc": "Horsens Byret"
+      }
+    },
+    "dk:viborg:randers": {
+      "institution-part": {
+        "dc": "Randers Byret"
+      }
+    },
+    "dk:viborg:sonderborg": {
+      "institution-part": {
+        "dc": "Sønderborg Byret"
+      }
+    },
+    "dk:viborg:thisted": {
+      "institution-part": {
+        "dc": "Thisted Byret"
+      }
+    },
+    "dk:viborg:tonder": {
+      "institution-part": {
+        "dc": "Tønder Byret"
+      }
+    },
+    "dk:viborg:viborg": {
+      "institution-part": {
+        "dc": "Viborg Byret"
+      }
+    }
+  }
+}

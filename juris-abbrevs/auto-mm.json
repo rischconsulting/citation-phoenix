@@ -1,0 +1,17 @@
+{
+  "filename": "auto-mm.json",
+  "name": "Republic of the Union of Myanmar",
+  "version": "2026-07-08 20:45:39 UTC",
+  "xdata": {
+    "default": {
+      "place": {
+        "MM": "Republic of the Union of Myanmar"
+      }
+    },
+    "mm": {
+      "institution-part": {
+        "supreme.court": "Supreme Court"
+      }
+    }
+  }
+}

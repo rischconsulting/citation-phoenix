@@ -1,0 +1,17 @@
+{
+  "filename": "auto-au.int.json",
+  "name": "African Union",
+  "version": "2026-07-08 20:45:38 UTC",
+  "xdata": {
+    "default": {
+      "place": {
+        "AU.INT": "African Union"
+      }
+    },
+    "au.int": {
+      "institution-part": {
+        "achpr": "African Court on Human and Peoples' Rights"
+      }
+    }
+  }
+}

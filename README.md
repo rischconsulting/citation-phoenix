@@ -1,7 +1,7 @@
-# IndigoBook-Phoenix (Zotero 8, 9) - v0.6.0
+# IndigoBook-Phoenix (Zotero 8, 9) - v0.7.0
 
-This plugin bundles US IndigoTemp jurisdiction modules and uses dynamic module loading via
-`sys.loadJurisdictionStyle(jurisdiction, variantName)` so multiple US jurisdictions can appear in one document.
+This plugin bundles Juris-M style modules and uses dynamic module loading via
+`sys.loadJurisdictionStyle(jurisdiction, variantName)` so multiple jurisdictions and module variants can appear in one document.
 
 It also patches citeproc item retrieval/abbreviation behavior and keeps case metadata synchronized with Juris-M-style
 `mlzsync1` data stored in Extra.
@@ -46,6 +46,16 @@ On item add/modify/select/render events, the plugin syncs case fields and MLZ pa
 The Zotero-facing `reporter` and `court` fields are treated as authoritative when populated. Blank fields are backfilled
 from MLZ data when available.
 
+For `case` items, the creator-type dropdown is extended with a plugin-managed `Commenter` option. Commenter names are stored in `Extra` -> `mlzsync1.extracreators` using Juris-M creator payloads, for example:
+
+- `{"firstName":"I.","lastName":"Karollus","creatorType":"commenter"}`
+- `{"name":"Wilhelm","creatorType":"commenter"}`
+
+The same dropdown also includes a plugin-managed `Translator` option. Translator names are stored in `Extra` -> `mlzsync1.extracreators` using Juris-M creator payloads, for example:
+
+- `{"firstName":"Jane","lastName":"Doe","creatorType":"translator"}`
+- `{"name":"Jane Doe","creatorType":"translator"}`
+
 ### Citation Pipeline Effects
 
 During citeproc item retrieval, the plugin decorates CSL JSON with:
@@ -53,6 +63,8 @@ During citeproc item retrieval, the plugin decorates CSL JSON with:
 - `jurisdiction` from the case item/MLZ data
 - `country` derived from the jurisdiction root token
 - `authority` based on the Zotero `court` field (normalized)
+- `commenter` from `mlzsync1.extracreators`
+- `translator` from `mlzsync1.extracreators`
 
 This is what drives jurisdiction-specific legal style module behavior at render time.
 
@@ -64,8 +76,8 @@ Journal abbreviations are primarily resolved from `container-title` values.
 
 Lookup order is:
 
-1. Primary jurisdiction data (`data/primary-us.json`) for the current jurisdiction chain.
-2. Secondary journal table (`data/secondary-us-bluebook.json`).
+1. Primary abbreviation table (`juris-abbrevs/primary-us.json`).
+2. Secondary journal table (`juris-abbrevs/secondary-us-bluebook.json` and any other `secondary-*.json` files).
 3. User journal overrides saved from the Preferences panel.
 4. Fallback word-based abbreviation logic when no table hit is found.
 
@@ -87,7 +99,7 @@ Pane location and assets:
 The panel supports two working modes via dataset selection:
 
 - Journals mode (`journals:secondary-us-bluebook`)
-- Jurisdiction mode (`primary-us`, `auto-us`, `juris-us-map`)
+- Jurisdiction mode (`juris-abbrevs/auto-us`, `juris-maps/juris-us-map`, and any other loaded jurisdiction datasets)
 
 ### What You Can Do In The Panel
 
@@ -152,6 +164,58 @@ Optional custom output base name:
 ./package-xpi.ps1 -OutputBaseName "my-build-name"
 ```
 
+### Refresh Jurisdiction Assets
+
+Use this when you want to import or refresh the Juris-M-style asset folders from their upstream source repositories:
+
+```powershell
+./scripts/sync-juris-assets.ps1
+```
+
+By default the script keeps shallow cached clones under `juris-source-cache/`, updates them, and syncs assets from:
+
+- `Juris-M/style-modules`
+- `Juris-M/legal-resource-registry` (compiled into compact `juris-maps` output and generated `auto-*.json` abbreviation datasets)
+- `fbennett/mlz-abbreviations` (layered in only for hand-maintained `secondary-*` and related static abbrev files)
+- `Juris-M/styles` (currently syncing `jm-*.csl`)
+
+The repo-local `juris-abbrevs/primary-us.json` is preserved as-is for now; it does not appear to come from either
+LRR or `mlz-abbreviations`.
+
+The sync is intentionally cautious:
+
+- missing upstream files are added
+- LRR-generated `juris-maps` and `juris-abbrevs/auto-*.json` files are treated as canonical by default
+- when one of those canonical generated files differs locally, the local file is backed up under `scripts/sync-juris-assets-backup/` and then replaced with the LRR-generated version
+- differing files from other upstream sources are reported in `scripts/sync-juris-assets-report.json` instead of overwriting local copies
+
+It then refreshes the generated/local metadata files and syncs content into:
+
+- `style-modules/`
+- `juris-abbrevs/`
+- `juris-maps/`
+- `styles/`
+
+It accepts `-SourceCacheRoot` and `-DestinationRoot` arguments if you want to use a different cache location or sync
+into another workspace. Pass `-UpdateSourceCheckout:$false` if you want to reuse the cached clones and build outputs
+without refreshing them first. Pass `-PreferCanonicalGenerated:$false` if you want LRR-generated conflicts to remain
+preservation-only for a run.
+
+### Regression Harness
+
+Use this to verify module resolution behavior after loader changes or Juris-M asset refreshes:
+
+```powershell
+node .\scripts\test-module-loader.mjs
+```
+
+The harness checks:
+
+- exact jurisdiction + exact variant resolution
+- child-to-parent fallback within a jurisdiction chain
+- fallback from variant requests to plain jurisdiction modules
+- default-root fallback for unknown jurisdictions
+
 ### PowerShell Execution Policy Note
 
 If script execution is blocked, run with a process-scoped bypass:
@@ -167,6 +231,18 @@ Install the generated `.xpi` in Zotero's add-ons UI.
 ## Project Files
 
 - `style-modules/` contains CSL-M IndigoTemp modules.
-- `data/` contains abbreviation and jurisdiction datasets.
+- `juris-abbrevs/` contains abbreviation datasets.
+- `juris-maps/` contains jurisdiction datasets.
+- `data/` remains as a compatibility fallback for older path references.
 - `lib/` contains source modules.
+- `scripts/sync-juris-assets.ps1` keeps the folder layout aligned with Juris-M-style sources.
 - `content/indigobook-cslm.js` is the bundled runtime script loaded by `bootstrap.js`.
+### Lightweight Regression Harnesses
+
+Run these from the repository root with Node:
+
+- `node .\scripts\test-module-loader.mjs`
+- `node .\scripts\test-abbrev-service.mjs`
+
+The abbreviation harness also verifies domain-sensitive auto datasets such as
+French Canadian `auto-ca-fr`.

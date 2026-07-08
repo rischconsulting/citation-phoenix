@@ -1,0 +1,12 @@
+{
+  "filename": "auto-vc.json",
+  "name": "Saint Vincent and the Grenadines",
+  "version": "2026-07-08 20:45:39 UTC",
+  "xdata": {
+    "default": {
+      "place": {
+        "VC": "Saint Vincent and the Grenadines"
+      }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "filename": "auto-ar.json",
+  "name": "Argentina",
+  "version": "2026-07-08 20:45:38 UTC",
+  "xdata": {
+    "default": {
+      "place": {
+        "AR": "Argentina"
+      }
+    }
+  }
+}

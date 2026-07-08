@@ -46,15 +46,15 @@ if ([string]::IsNullOrWhiteSpace($OutputBaseName)) {
     }
 }
 
-$zipPath = Join-Path -Path $sourcePath -ChildPath ("{0}.zip" -f $OutputBaseName)
+$zipPath = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath ("{0}-{1}.zip" -f $OutputBaseName, ([guid]::NewGuid().ToString('N')))
 $xpiPath = Join-Path -Path $sourcePath -ChildPath ("{0}.xpi" -f $OutputBaseName)
 
 Write-Host "Source: $sourcePath"
 Write-Host "Zip:    $zipPath"
 Write-Host "XPI:    $xpiPath"
 
-if (Test-Path -Path $zipPath) { Remove-Item -Path $zipPath -Force }
-if (Test-Path -Path $xpiPath) { Remove-Item -Path $xpiPath -Force }
+if (Test-Path -Path $zipPath) { Remove-Item -Path $zipPath -Force -ErrorAction SilentlyContinue }
+if (Test-Path -Path $xpiPath) { Remove-Item -Path $xpiPath -Force -ErrorAction SilentlyContinue }
 
 $zipName = Split-Path -Leaf $zipPath
 $xpiName = Split-Path -Leaf $xpiPath
@@ -66,6 +66,7 @@ $filesToArchive = Get-ChildItem -Path $sourcePath -File -Recurse -Force |
 
         # Exclude VCS dir and output artifacts
         if ($rel -match '^(\.git[\\/]|\.git$)') { return $false }
+        if ($rel -match '^(jurism-zotero[\\/]|_old_versions[\\/])') { return $false }
         if ($rel -ieq $zipName -or $rel -ieq $xpiName) { return $false }
 
         # Exclude script helpers from package
@@ -92,6 +93,7 @@ finally {
     $zip.Dispose()
 }
 
-Move-Item -Path $zipPath -Destination $xpiPath
+Copy-Item -Path $zipPath -Destination $xpiPath -Force
+Remove-Item -Path $zipPath -Force
 
 Write-Host "Created package: $xpiPath" -ForegroundColor Green
