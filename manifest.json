@@ -1,8 +1,8 @@
 {
   "manifest_version": 2,
-  "name": "indigo-phoenix",
-  "version": "0.7.0",
-  "description": "CSL-M IndigoBook module loading + Juris-M-style abbreviations for US legal citations.",
+  "name": "citation-phoenix",
+  "version": "0.8.0",
+  "description": "CSL-M module loading + Juris-M-style abbreviations for US legal citations.",
   "author": "Michael Risch",
   "icons": { "48": "content/ui/icon48.svg" },
   "applications": {

@@ -1,4 +1,6 @@
-# IndigoBook-Phoenix (Zotero 8, 9) - v0.7.0
+# IndigoBook-Phoenix (Zotero 8, 9) - v0.8.0
+
+Now multi-jurisdictional.
 
 This plugin bundles Juris-M style modules and uses dynamic module loading via
 `sys.loadJurisdictionStyle(jurisdiction, variantName)` so multiple jurisdictions and module variants can appear in one document.
