@@ -1,65 +1,318 @@
 param(
-    [string]$SourceRoot = (Join-Path $PSScriptRoot '..\jurism-zotero'),
+    [string]$SourceCacheRoot = (Join-Path $PSScriptRoot '..\juris-source-cache'),
     [string]$DestinationRoot = (Join-Path $PSScriptRoot '..'),
-    [bool]$UpdateSourceCheckout = $true
+    [bool]$UpdateSourceCheckout = $true,
+    [bool]$PreferCanonicalGenerated = $true
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = (Resolve-Path -Path $DestinationRoot).Path
-if (-not (Test-Path -LiteralPath $SourceRoot)) {
-    throw "Source root not found: $SourceRoot"
+$cacheRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine($PSScriptRoot, $SourceCacheRoot))
+
+$sourceRepos = @(
+    [ordered]@{
+        Name = 'style-modules'
+        RepoUrl = 'https://github.com/Juris-M/style-modules.git'
+        CheckoutPath = Join-Path $cacheRoot 'style-modules'
+        SourcePath = Join-Path $cacheRoot 'style-modules'
+        DestinationPath = Join-Path $repoRoot 'style-modules'
+        Include = @('*.csl', 'README.md', 'LICENSE')
+        PruneAll = $true
+    },
+    [ordered]@{
+        Name = 'styles'
+        RepoUrl = 'https://github.com/Juris-M/styles.git'
+        CheckoutPath = Join-Path $cacheRoot 'styles'
+        SourcePath = Join-Path $cacheRoot 'styles'
+        DestinationPath = Join-Path $repoRoot 'styles'
+        Include = @('jm-*.csl')
+        PruneAll = $true
+    }
+)
+
+$lrrCheckoutPath = Join-Path $cacheRoot 'legal-resource-registry'
+$lrrBuildRoot = Join-Path $cacheRoot 'legal-resource-registry-build'
+$lrrBuildMapRoot = Join-Path $lrrBuildRoot 'juris-maps'
+$lrrBuildAbbrevRoot = Join-Path $lrrBuildRoot 'juris-abbrevs'
+$mlzAbbrevCheckoutPath = Join-Path $cacheRoot 'mlz-abbreviations'
+$syncReportPath = Join-Path $repoRoot 'scripts\sync-juris-assets-report.json'
+$syncBackupRoot = Join-Path $repoRoot 'scripts\sync-juris-assets-backup'
+$syncConflicts = [System.Collections.Generic.List[object]]::new()
+
+function Get-GitCommand {
+    $git = Get-Command git -ErrorAction SilentlyContinue
+    if (-not $git) {
+        throw 'git is required to sync upstream Juris-M assets.'
+    }
+    return $git.Source
 }
 
-$sourceRoot = (Resolve-Path -Path $SourceRoot).Path
-$importDirs = @('style-modules', 'juris-abbrevs', 'juris-maps')
+function Get-NodeCommand {
+    $node = Get-Command node -ErrorAction SilentlyContinue
+    if (-not $node) {
+        throw 'node is required to compile legal-resource-registry jurisdiction maps.'
+    }
+    return $node.Source
+}
 
-function Test-DirectoryHasFiles {
+function Get-NpmCommand {
+    $npm = Get-Command npm -ErrorAction SilentlyContinue
+    if (-not $npm) {
+        $npm = Get-Command npm.cmd -ErrorAction SilentlyContinue
+    }
+    if (-not $npm) {
+        throw 'npm is required to install legal-resource-registry build dependencies.'
+    }
+    return $npm.Source
+}
+
+function Ensure-Directory {
     param([string]$Path)
 
     if (-not (Test-Path -LiteralPath $Path)) {
-        return $false
+        New-Item -ItemType Directory -Path $Path -Force | Out-Null
     }
-
-    return $null -ne (Get-ChildItem -LiteralPath $Path -File -Recurse -Force -ErrorAction SilentlyContinue | Select-Object -First 1)
 }
 
-function Update-SourceCheckout {
+function Ensure-GitCheckout {
     param(
-        [string]$RepoPath,
-        [string[]]$DirsToCheck
+        [string]$RepoUrl,
+        [string]$CheckoutPath,
+        [string]$Name
     )
 
-    if (-not $script:UpdateSourceCheckout) {
+    $git = Get-GitCommand
+    $checkoutExists = Test-Path -LiteralPath $CheckoutPath
+    $gitDirPath = Join-Path $CheckoutPath '.git'
+
+    if (-not $checkoutExists) {
+        if (-not $script:UpdateSourceCheckout) {
+            throw "Missing cached source checkout for $Name at $CheckoutPath. Re-run with -UpdateSourceCheckout:`$true to clone it."
+        }
+
+        Ensure-Directory -Path (Split-Path -Path $CheckoutPath -Parent)
+        Write-Host "Cloning $Name from $RepoUrl" -ForegroundColor Cyan
+        & $git clone --depth 1 $RepoUrl $CheckoutPath
+        if ($LASTEXITCODE -ne 0) {
+            throw "git clone failed for $Name with exit code $LASTEXITCODE"
+        }
         return
     }
 
-    $gitDirPath = Join-Path -Path $RepoPath -ChildPath '.git'
     if (-not (Test-Path -LiteralPath $gitDirPath)) {
+        throw "Cached source checkout for $Name is not a git repository: $CheckoutPath"
+    }
+
+    if (-not $script:UpdateSourceCheckout) {
+        Write-Host "Using cached $Name checkout at $CheckoutPath" -ForegroundColor DarkGray
         return
     }
 
-    $git = Get-Command git -ErrorAction SilentlyContinue
-    if (-not $git) {
-        throw "git is required to update the Juris-M source checkout."
+    Write-Host "Updating $Name checkout..." -ForegroundColor Cyan
+    & $git -C $CheckoutPath fetch --all --prune
+    if ($LASTEXITCODE -ne 0) {
+        throw "git fetch failed for $Name with exit code $LASTEXITCODE"
     }
 
-    Write-Host "Updating Juris-M source checkout..." -ForegroundColor Cyan
-    & $git.Source -C $RepoPath fetch --all --prune
+    & $git -C $CheckoutPath pull --ff-only
     if ($LASTEXITCODE -ne 0) {
-        throw "git fetch failed with exit code $LASTEXITCODE"
+        throw "git pull failed for $Name with exit code $LASTEXITCODE"
+    }
+}
+
+function Get-RelativeFiles {
+    param(
+        [string]$RootPath,
+        [string[]]$Include
+    )
+
+    if (-not (Test-Path -LiteralPath $RootPath)) {
+        throw "Source path not found: $RootPath"
     }
 
-    & $git.Source -C $RepoPath pull --ff-only --recurse-submodules=on-demand
-    if ($LASTEXITCODE -ne 0) {
-        throw "git pull failed with exit code $LASTEXITCODE"
+    $root = (Resolve-Path -LiteralPath $RootPath).Path
+    $files = Get-ChildItem -LiteralPath $root -File -Recurse -Force -ErrorAction SilentlyContinue |
+        Where-Object {
+            $relative = $_.FullName.Substring($root.Length).TrimStart('\', '/') -replace '\\', '/'
+            foreach ($pattern in $Include) {
+                if ($relative -like $pattern) {
+                    return $true
+                }
+            }
+            return $false
+        }
+
+    $relativeFiles = $files |
+        Sort-Object -Property FullName -Unique |
+        ForEach-Object {
+            $_.FullName.Substring($root.Length).TrimStart('\', '/') -replace '\\', '/'
+        } |
+        Where-Object { $_ -and ($_ -notmatch '(^|[\\/])\.git([\\/]|$)') }
+
+    return @($relativeFiles)
+}
+
+function Sync-ManagedFiles {
+    param(
+        [string]$Label,
+        [string]$SourcePath,
+        [string]$DestinationPath,
+        [string[]]$Include,
+        [bool]$PreferSourceOnConflict = $false
+    )
+
+    Ensure-Directory -Path $DestinationPath
+    $sourceRoot = (Resolve-Path -LiteralPath $SourcePath).Path
+    $targetRoot = (Resolve-Path -LiteralPath $DestinationPath).Path
+
+    $relativeFiles = Get-RelativeFiles -RootPath $sourceRoot -Include $Include
+    if (-not $relativeFiles) {
+        throw "No matching files found for $Label in $sourceRoot"
     }
 
-    # Keep submodule content aligned with the checked-out superproject commit.
-    & $git.Source -C $RepoPath submodule update --init --recursive
-    if ($LASTEXITCODE -ne 0) {
-        throw "git submodule update failed with exit code $LASTEXITCODE"
+    $managed = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+
+    foreach ($relative in $relativeFiles) {
+        [void]$managed.Add($relative)
+
+        $fromPath = Join-Path $sourceRoot $relative
+        $toPath = Join-Path $targetRoot $relative
+        $toDir = Split-Path -Path $toPath -Parent
+        Ensure-Directory -Path $toDir
+
+        if (-not (Test-Path -LiteralPath $toPath)) {
+            Copy-Item -LiteralPath $fromPath -Destination $toPath -Force
+            Write-Host "Imported $Label/$relative" -ForegroundColor Cyan
+            continue
+        }
+
+        $sourceHash = (Get-FileHash -LiteralPath $fromPath -Algorithm SHA256).Hash
+        $destinationHash = (Get-FileHash -LiteralPath $toPath -Algorithm SHA256).Hash
+        if ($sourceHash -eq $destinationHash) {
+            Write-Host "Unchanged $Label/$relative" -ForegroundColor DarkGray
+            continue
+        }
+
+        if ($PreferSourceOnConflict) {
+            $backupPath = Join-Path $syncBackupRoot $Label
+            $backupPath = Join-Path $backupPath $relative
+            $backupDir = Split-Path -Path $backupPath -Parent
+            Ensure-Directory -Path $backupDir
+            Copy-Item -LiteralPath $toPath -Destination $backupPath -Force
+            Copy-Item -LiteralPath $fromPath -Destination $toPath -Force
+
+            $script:syncConflicts.Add([ordered]@{
+                label = $Label
+                relativePath = $relative
+                resolution = 'replaced-with-upstream'
+                destinationPath = $toPath
+                sourcePath = $fromPath
+                backupPath = $backupPath
+            }) | Out-Null
+            Write-Warning "Replaced existing $Label/$relative with upstream version; backup saved to $backupPath"
+            continue
+        }
+
+        $script:syncConflicts.Add([ordered]@{
+            label = $Label
+            relativePath = $relative
+            resolution = 'preserved-local'
+            destinationPath = $toPath
+            sourcePath = $fromPath
+        }) | Out-Null
+        Write-Warning "Preserved existing $Label/$relative; upstream version differs at $fromPath"
+    }
+}
+
+function Write-SyncReport {
+    if ($script:syncConflicts.Count -eq 0) {
+        $payload = [ordered]@{
+            generatedAt = (Get-Date).ToString('o')
+            preferCanonicalGenerated = $PreferCanonicalGenerated
+            summary = [ordered]@{
+                preservedLocal = 0
+                replacedWithUpstream = 0
+                total = 0
+            }
+            conflicts = @()
+        } | ConvertTo-Json -Depth 5
+
+        Set-Content -LiteralPath $syncReportPath -Value $payload -Encoding utf8
+        return
+    }
+
+    $preservedCount = @($script:syncConflicts | Where-Object { $_.resolution -eq 'preserved-local' }).Count
+    $replacedCount = @($script:syncConflicts | Where-Object { $_.resolution -eq 'replaced-with-upstream' }).Count
+
+    $payload = [ordered]@{
+        generatedAt = (Get-Date).ToString('o')
+        preferCanonicalGenerated = $PreferCanonicalGenerated
+        summary = [ordered]@{
+            preservedLocal = $preservedCount
+            replacedWithUpstream = $replacedCount
+            total = $script:syncConflicts.Count
+        }
+        conflicts = @($script:syncConflicts)
+    } | ConvertTo-Json -Depth 5
+
+    Set-Content -LiteralPath $syncReportPath -Value $payload -Encoding utf8
+    Write-Warning "Recorded $($script:syncConflicts.Count) upstream differences ($replacedCount replaced, $preservedCount preserved). See $syncReportPath"
+}
+
+function Build-LegalResourceRegistryOutputs {
+    $node = Get-NodeCommand
+    $npm = Get-NpmCommand
+
+    Ensure-GitCheckout -RepoUrl 'https://github.com/Juris-M/legal-resource-registry.git' -CheckoutPath $lrrCheckoutPath -Name 'legal-resource-registry'
+
+    Ensure-Directory -Path $lrrBuildRoot
+    Ensure-Directory -Path $lrrBuildMapRoot
+    Ensure-Directory -Path $lrrBuildAbbrevRoot
+
+    $nodeModulesPath = Join-Path $lrrCheckoutPath 'node_modules'
+    if ($script:UpdateSourceCheckout -or -not (Test-Path -LiteralPath $nodeModulesPath)) {
+        Write-Host 'Installing legal-resource-registry build dependencies...' -ForegroundColor Cyan
+        Push-Location $lrrCheckoutPath
+        try {
+            & $npm install --no-audit --no-fund
+        } finally {
+            Pop-Location
+        }
+        if ($LASTEXITCODE -ne 0) {
+            throw "npm install failed for legal-resource-registry with exit code $LASTEXITCODE"
+        }
+    }
+
+    $jurisUpdateHome = Join-Path $lrrBuildRoot '.jurisUpdate-home'
+    Ensure-Directory -Path $jurisUpdateHome
+
+    $jurisUpdateConfigPath = Join-Path $jurisUpdateHome '.jurisUpdate'
+    $config = [ordered]@{
+        path = [ordered]@{
+            jurisSrcDir = (Join-Path $lrrCheckoutPath 'src')
+            jurisMapDir = $lrrBuildMapRoot
+            jurisAbbrevsDir = $lrrBuildAbbrevRoot
+        }
+    } | ConvertTo-Json -Depth 4
+    [System.IO.File]::WriteAllText($jurisUpdateConfigPath, $config, [System.Text.UTF8Encoding]::new($false))
+
+    Write-Host 'Compiling legal-resource-registry maps...' -ForegroundColor Cyan
+    $originalUserProfile = $env:USERPROFILE
+    $originalHome = $env:HOME
+    Push-Location $lrrCheckoutPath
+    try {
+        $env:USERPROFILE = $jurisUpdateHome
+        $env:HOME = $jurisUpdateHome
+        & $node .\scripts\index.js -a
+        if ($LASTEXITCODE -ne 0) {
+            throw "legal-resource-registry compilation failed with exit code $LASTEXITCODE"
+        }
+    } finally {
+        $env:USERPROFILE = $originalUserProfile
+        $env:HOME = $originalHome
+        Pop-Location
     }
 }
 
@@ -83,7 +336,7 @@ function Update-StyleModuleIndex {
     } | ConvertTo-Json -Depth 3
 
     Set-Content -LiteralPath (Join-Path -Path $rootPath -ChildPath 'index.json') -Value $payload -Encoding utf8
-    Write-Host "Rebuilt style-modules/index.json" -ForegroundColor Cyan
+    Write-Host 'Rebuilt style-modules/index.json' -ForegroundColor Cyan
 }
 
 function Update-AbbrevDirectoryListing {
@@ -109,7 +362,7 @@ function Update-AbbrevDirectoryListing {
                 }
             }
         } catch {
-            Write-Warning "Could not read existing DIRECTORY_LISTING.json; rebuilding from filenames only."
+            Write-Warning 'Could not read existing DIRECTORY_LISTING.json; rebuilding from filenames only.'
         }
     }
 
@@ -131,7 +384,7 @@ function Update-AbbrevDirectoryListing {
 
     $payload = $entries | ConvertTo-Json -Depth 4
     Set-Content -LiteralPath $listingPath -Value $payload -Encoding utf8
-    Write-Host "Rebuilt juris-abbrevs/DIRECTORY_LISTING.json" -ForegroundColor Cyan
+    Write-Host 'Rebuilt juris-abbrevs/DIRECTORY_LISTING.json' -ForegroundColor Cyan
 }
 
 function Format-DatasetLabel {
@@ -203,7 +456,7 @@ function Update-JurisMapDirectoryListing {
                 }
             }
         } catch {
-            Write-Warning "Could not read existing juris-maps DIRECTORY_LISTING.json; rebuilding from files."
+            Write-Warning 'Could not read existing juris-maps DIRECTORY_LISTING.json; rebuilding from files.'
         }
     }
 
@@ -231,48 +484,26 @@ function Update-JurisMapDirectoryListing {
 
     $payload = $entries | ConvertTo-Json -Depth 4
     Set-Content -LiteralPath $listingPath -Value $payload -Encoding utf8
-    Write-Host "Rebuilt juris-maps/DIRECTORY_LISTING.json" -ForegroundColor Cyan
+    Write-Host 'Rebuilt juris-maps/DIRECTORY_LISTING.json' -ForegroundColor Cyan
 }
 
-Update-SourceCheckout -RepoPath $sourceRoot -DirsToCheck $importDirs
+Ensure-Directory -Path $cacheRoot
 
-foreach ($importDir in $importDirs) {
-    $sourceDir = Join-Path -Path $sourceRoot -ChildPath $importDir
-    if (-not (Test-Path -LiteralPath $sourceDir)) {
-        Write-Warning "Skipping missing source directory: $importDir"
-        continue
-    }
-
-    $files = Get-ChildItem -LiteralPath $sourceDir -File -Recurse -Force
-    if (-not $files) {
-        Write-Warning "No files found in source directory: $importDir"
-        continue
-    }
-
-    foreach ($file in $files) {
-        $relative = $file.FullName.Substring($sourceDir.Length).TrimStart('\', '/')
-        if ($relative -match '(^|[\\/])\.') {
-            continue
-        }
-        $destinationPath = Join-Path -Path $repoRoot -ChildPath (Join-Path $importDir $relative)
-
-        if ([System.IO.Path]::GetFullPath($file.FullName) -ieq [System.IO.Path]::GetFullPath($destinationPath)) {
-            Write-Host "Already in place: $(Join-Path $importDir $relative)" -ForegroundColor DarkGray
-            continue
-        }
-
-        $destinationDir = Split-Path -Path $destinationPath -Parent
-        if (-not (Test-Path -LiteralPath $destinationDir)) {
-            New-Item -ItemType Directory -Path $destinationDir | Out-Null
-        }
-
-        Copy-Item -LiteralPath $file.FullName -Destination $destinationPath -Force
-        Write-Host "Imported $(Join-Path $importDir $relative)" -ForegroundColor Cyan
-    }
+foreach ($sourceRepo in $sourceRepos) {
+    Ensure-GitCheckout -RepoUrl $sourceRepo.RepoUrl -CheckoutPath $sourceRepo.CheckoutPath -Name $sourceRepo.Name
+    Sync-ManagedFiles -Label $sourceRepo.Name -SourcePath $sourceRepo.SourcePath -DestinationPath $sourceRepo.DestinationPath -Include $sourceRepo.Include
 }
+
+Build-LegalResourceRegistryOutputs
+Sync-ManagedFiles -Label 'juris-maps' -SourcePath $lrrBuildMapRoot -DestinationPath (Join-Path $repoRoot 'juris-maps') -Include @('juris-*-map.json', 'versions.json') -PreferSourceOnConflict $PreferCanonicalGenerated
+Sync-ManagedFiles -Label 'juris-abbrevs-auto' -SourcePath $lrrBuildAbbrevRoot -DestinationPath (Join-Path $repoRoot 'juris-abbrevs') -Include @('auto-*.json') -PreferSourceOnConflict $PreferCanonicalGenerated
+
+Ensure-GitCheckout -RepoUrl 'https://github.com/fbennett/mlz-abbreviations.git' -CheckoutPath $mlzAbbrevCheckoutPath -Name 'mlz-abbreviations'
+Sync-ManagedFiles -Label 'juris-abbrevs-static' -SourcePath $mlzAbbrevCheckoutPath -DestinationPath (Join-Path $repoRoot 'juris-abbrevs') -Include @('secondary-*.json', 'abbreviations-empty.json', 'README.md', 'LICENSE')
 
 Update-StyleModuleIndex -StyleModulesRoot (Join-Path -Path $repoRoot -ChildPath 'style-modules')
 Update-AbbrevDirectoryListing -AbbrevRoot (Join-Path -Path $repoRoot -ChildPath 'juris-abbrevs')
 Update-JurisMapDirectoryListing -MapRoot (Join-Path -Path $repoRoot -ChildPath 'juris-maps')
+Write-SyncReport
 
-Write-Host "Juris-M asset import complete." -ForegroundColor Green
+Write-Host 'Juris-M asset sync complete.' -ForegroundColor Green

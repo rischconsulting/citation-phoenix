@@ -166,32 +166,40 @@ Optional custom output base name:
 
 ### Refresh Jurisdiction Assets
 
-Use this when you want to import or refresh the Juris-M-style asset folders from a Juris-M checkout:
+Use this when you want to import or refresh the Juris-M-style asset folders from their upstream source repositories:
 
 ```powershell
 ./scripts/sync-juris-assets.ps1
 ```
 
-By default the script looks for a sibling `jurism-zotero` checkout, fetches and fast-forwards it, refreshes its
-submodules, and then copies the canonical asset folders into:
+By default the script keeps shallow cached clones under `juris-source-cache/`, updates them, and syncs assets from:
+
+- `Juris-M/style-modules`
+- `Juris-M/legal-resource-registry` (compiled into compact `juris-maps` output and generated `auto-*.json` abbreviation datasets)
+- `fbennett/mlz-abbreviations` (layered in only for hand-maintained `secondary-*` and related static abbrev files)
+- `Juris-M/styles` (currently syncing `jm-*.csl`)
+
+The repo-local `juris-abbrevs/primary-us.json` is preserved as-is for now; it does not appear to come from either
+LRR or `mlz-abbreviations`.
+
+The sync is intentionally cautious:
+
+- missing upstream files are added
+- LRR-generated `juris-maps` and `juris-abbrevs/auto-*.json` files are treated as canonical by default
+- when one of those canonical generated files differs locally, the local file is backed up under `scripts/sync-juris-assets-backup/` and then replaced with the LRR-generated version
+- differing files from other upstream sources are reported in `scripts/sync-juris-assets-report.json` instead of overwriting local copies
+
+It then refreshes the generated/local metadata files and syncs content into:
 
 - `style-modules/`
 - `juris-abbrevs/`
 - `juris-maps/`
+- `styles/`
 
-It accepts `-SourceRoot` and `-DestinationRoot` arguments if you want to mirror the files from another checkout or
-into another workspace. Pass `-UpdateSourceCheckout:$false` if you want to skip the Git refresh and just copy from the
-local source tree.
-
-To update the local Juris-M source checkout itself, run a Git fetch or pull inside `jurism-zotero/`, for example:
-
-```powershell
-git -C .\jurism-zotero fetch --all --prune
-git -C .\jurism-zotero pull --ff-only
-```
-
-If you want to move the checkout to a specific upstream branch or tag, use `git checkout` in that folder first, then
-re-run the import script.
+It accepts `-SourceCacheRoot` and `-DestinationRoot` arguments if you want to use a different cache location or sync
+into another workspace. Pass `-UpdateSourceCheckout:$false` if you want to reuse the cached clones and build outputs
+without refreshing them first. Pass `-PreferCanonicalGenerated:$false` if you want LRR-generated conflicts to remain
+preservation-only for a run.
 
 ### Regression Harness
 
