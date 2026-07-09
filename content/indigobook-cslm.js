@@ -92,7 +92,7 @@ var IndigoBookCSLM = (() => {
       if (!jsonText) return null;
       try {
         const obj = JSON.parse(jsonText);
-        return obj?.extrafields || null;
+        return this._getMLZFieldObject(obj);
       } catch (e) {
         return null;
       }
@@ -130,7 +130,7 @@ var IndigoBookCSLM = (() => {
       }
       if (retainedCreators.length) payload.extracreators = retainedCreators;
       else delete payload.extracreators;
-      const hasExtraFields = payload.extrafields && typeof payload.extrafields === "object" && !Array.isArray(payload.extrafields) && Object.keys(payload.extrafields).length;
+      const hasExtraFields = this._hasMLZFields(payload);
       const hasExtraCreators = Array.isArray(payload.extracreators) && payload.extracreators.length;
       if (!hasExtraFields && !hasExtraCreators) {
         if (parsed.start != null && parsed.end != null) {
@@ -152,10 +152,19 @@ ${mlzBlock}` : mlzBlock;
       if (!value) return "";
       return this._normalizeJurisdiction(this._decodeLengthPrefixedJurisdiction(String(value)) || "");
     }
+    static getMLZItemType(itemOrExtra) {
+      const fields = this.getMLZExtraFields(itemOrExtra);
+      return String(fields?.xtype || fields?.itemType || "").trim();
+    }
     static updateMLZJurisdiction(itemOrExtra, jurisdiction, displayValue = "") {
       const normalized = this._normalizeJurisdiction(jurisdiction || "");
       const encoded = normalized ? this._encodeLengthPrefixedJurisdiction(normalized, displayValue) : "";
       return this.updateMLZExtraField(itemOrExtra, "jurisdiction", encoded);
+    }
+    static updateMLZItemType(itemOrExtra, itemType) {
+      let nextExtra = this.updateMLZExtraField(itemOrExtra, "xtype", String(itemType || "").trim());
+      nextExtra = this.updateMLZExtraField(nextExtra, "itemType", "");
+      return nextExtra;
     }
     static updateMLZExtraField(itemOrExtra, fieldName, fieldValue) {
       const extra = typeof itemOrExtra === "string" ? itemOrExtra : itemOrExtra?.getField?.("extra") || itemOrExtra?.extra || "";
@@ -166,14 +175,12 @@ ${mlzBlock}` : mlzBlock;
         return extra;
       }
       const payload = parsed.payload || {};
-      if (!payload.extrafields || typeof payload.extrafields !== "object" || Array.isArray(payload.extrafields)) {
-        payload.extrafields = {};
-      }
+      const targetFields = this._ensureMLZFieldObject(payload);
       const value = fieldValue == null ? "" : String(fieldValue).trim();
-      if (value) payload.extrafields[field] = value;
-      else delete payload.extrafields[field];
-      if (!Object.keys(payload.extrafields).length) delete payload.extrafields;
-      const hasExtraFields = payload.extrafields && typeof payload.extrafields === "object" && !Array.isArray(payload.extrafields) && Object.keys(payload.extrafields).length;
+      if (value) targetFields[field] = value;
+      else delete targetFields[field];
+      this._cleanupEmptyMLZFieldObject(payload);
+      const hasExtraFields = this._hasMLZFields(payload);
       const hasExtraCreators = Array.isArray(payload.extracreators) && payload.extracreators.length;
       if (!hasExtraFields && !hasExtraCreators) {
         if (parsed.start != null && parsed.end != null) {
@@ -196,41 +203,7 @@ ${mlzBlock}` : mlzBlock;
       return this._decodeLengthPrefixedJurisdiction(j);
     }
     static _extractMLZJSON(extra) {
-      const idx = (extra || "").indexOf("mlzsync1:");
-      if (idx === -1) return null;
-      const braceStart = extra.indexOf("{", idx);
-      if (braceStart === -1) return null;
-      let depth = 0;
-      let inString = false;
-      let escaping = false;
-      for (let i = braceStart; i < extra.length; i += 1) {
-        const ch = extra[i];
-        if (inString) {
-          if (escaping) {
-            escaping = false;
-          } else if (ch === "\\") {
-            escaping = true;
-          } else if (ch === '"') {
-            inString = false;
-          }
-          continue;
-        }
-        if (ch === '"') {
-          inString = true;
-          continue;
-        }
-        if (ch === "{") {
-          depth += 1;
-          continue;
-        }
-        if (ch === "}") {
-          depth -= 1;
-          if (depth === 0) {
-            return extra.slice(braceStart, i + 1);
-          }
-        }
-      }
-      return null;
+      return this._getMLZPayloadAndRange(extra).jsonText || null;
     }
     static _getMLZPayloadAndRange(extra) {
       const source = String(extra || "");
@@ -239,8 +212,8 @@ ${mlzBlock}` : mlzBlock;
       if (markerIndex === -1) {
         return { payload: null, start: null, end: null };
       }
-      const braceStart = source.indexOf("{", markerIndex);
-      if (braceStart === -1) {
+      const braceStart = this._findMLZPayloadBraceStart(source, markerIndex + marker.length);
+      if (braceStart == null) {
         return { payload: null, start: null, end: null };
       }
       let depth = 0;
@@ -270,15 +243,35 @@ ${mlzBlock}` : mlzBlock;
               return {
                 payload: JSON.parse(jsonText),
                 start: markerIndex,
-                end: i + 1
+                end: i + 1,
+                jsonText
               };
             } catch (e) {
-              return { payload: null, start: markerIndex, end: i + 1 };
+              return {
+                payload: null,
+                start: markerIndex,
+                end: i + 1,
+                jsonText
+              };
             }
           }
         }
       }
-      return { payload: null, start: markerIndex, end: source.length };
+      return { payload: null, start: markerIndex, end: source.length, jsonText: null };
+    }
+    static _findMLZPayloadBraceStart(source, searchStart = 0) {
+      const text = String(source || "");
+      let idx = Math.max(0, Number(searchStart) || 0);
+      while (idx < text.length) {
+        const ch = text[idx];
+        if (ch === "{") return idx;
+        if (/\s/.test(ch) || /\d/.test(ch)) {
+          idx += 1;
+          continue;
+        }
+        return null;
+      }
+      return null;
     }
     static _removeMLZBlock(extra, start, end) {
       const source = String(extra || "");
@@ -286,6 +279,43 @@ ${mlzBlock}` : mlzBlock;
       const suffix = source.slice(end).replace(/^\r?\n/, "");
       const combined = `${prefix}${prefix && suffix ? "\n" : ""}${suffix}`;
       return combined.trimEnd();
+    }
+    static _getMLZFieldObject(payload) {
+      if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
+      if (payload.extrafields && typeof payload.extrafields === "object" && !Array.isArray(payload.extrafields)) {
+        return payload.extrafields;
+      }
+      const bareEntries = Object.entries(payload).filter(([key]) => key !== "extracreators");
+      if (!bareEntries.length) return null;
+      return Object.fromEntries(bareEntries);
+    }
+    static _ensureMLZFieldObject(payload) {
+      if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+        return {};
+      }
+      if (payload.extrafields && typeof payload.extrafields === "object" && !Array.isArray(payload.extrafields)) {
+        return payload.extrafields;
+      }
+      if ("extracreators" in payload) {
+        if (!payload.extrafields || typeof payload.extrafields !== "object" || Array.isArray(payload.extrafields)) {
+          payload.extrafields = {};
+        }
+        return payload.extrafields;
+      }
+      return payload;
+    }
+    static _cleanupEmptyMLZFieldObject(payload) {
+      if (!payload || typeof payload !== "object" || Array.isArray(payload)) return;
+      if (payload.extrafields && typeof payload.extrafields === "object" && !Array.isArray(payload.extrafields) && !Object.keys(payload.extrafields).length) {
+        delete payload.extrafields;
+      }
+    }
+    static _hasMLZFields(payload) {
+      if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
+      if (payload.extrafields && typeof payload.extrafields === "object" && !Array.isArray(payload.extrafields)) {
+        return Object.keys(payload.extrafields).length > 0;
+      }
+      return Object.keys(payload).some((key) => key !== "extracreators");
     }
     static _normalizeExtraCreator(creator, creatorType) {
       if (!creator || typeof creator !== "object") return null;
@@ -2171,6 +2201,7 @@ ${mlzBlock}` : mlzBlock;
       this._itemObserverID = null;
       this._itemPanePatchTimer = null;
       this._infoPaneRefreshTimer = null;
+      this._forceFullInfoPaneRefresh = false;
       this._itemPanePatchAttempts = 0;
       this._maxItemPanePatchAttempts = 20;
       this._commenterRowID = "ibcslm-commenter-row";
@@ -2178,6 +2209,9 @@ ${mlzBlock}` : mlzBlock;
       this._jurisdictionRowID = "ibcslm-jurisdiction-row";
       this._customCourtRowID = "ibcslm-custom-court-row";
       this._schemaInfoRowIDPrefix = "ibcslm-schema-row";
+      this._customItemTypeMenuValuePrefix = "ibcslm-type:";
+      this._newItemMenuMarkerAttribute = "data-ibcslm-new-item-custom";
+      this._pendingCustomNewItemTypes = [];
       this._registeredSchemaRowIDs = [];
       this._syncInFlight = /* @__PURE__ */ new Set();
       this._journalAbbrByContainerTitleKey = /* @__PURE__ */ new Map();
@@ -2192,8 +2226,12 @@ ${mlzBlock}` : mlzBlock;
       this._registerCaseReporterSync();
       this._patchItemPaneRender();
       this._patchInfoBoxRender();
+      this._patchNewItemBuilders();
+      this._patchNewItemMenus();
     }
     unpatch() {
+      this._unpatchNewItemMenus();
+      this._unpatchNewItemBuilders();
       this._unregisterCaseReporterSync();
       this._unpatchInfoBoxRender();
       this._unpatchItemPaneRender();
@@ -2398,9 +2436,14 @@ ${mlzBlock}` : mlzBlock;
           if (type === "item" && Array.isArray(ids) && ids.length) {
             let changed = false;
             for (const id of ids) {
+              if (event === "add") {
+                changed = await self._applyPendingCustomNewItemType(id) || changed;
+              }
               changed = await self._syncItemFromFieldsAndMLZ(id) || changed;
             }
-            if (changed || event === "modify") {
+            if (changed) {
+              self._scheduleActiveInfoPaneRefresh(75, true);
+            } else if (["select", "refresh", "redraw", "modify"].includes(event)) {
               self._scheduleActiveInfoPaneRefresh(75);
             }
             return;
@@ -2408,6 +2451,351 @@ ${mlzBlock}` : mlzBlock;
           await self._syncCaseReporterFromActiveSelection();
         }
       }, ["item", "itempane", "tab"], "indigobook-cslm-case-reporter-sync");
+    }
+    _patchNewItemMenus() {
+      const mainWindow = Zotero.getMainWindow?.();
+      const doc = mainWindow?.document;
+      if (!doc) {
+        this._scheduleItemPaneRenderPatch();
+        return;
+      }
+      if (this._orig.newItemMenuDocument === doc) return;
+      this._unpatchNewItemMenus();
+      const self = this;
+      const onPopupShowing = function(event) {
+        try {
+          self._augmentNewItemPopup(event?.target || null);
+        } catch (e) {
+          try {
+            Zotero.debug(`[IndigoBook CSL-M] new item popup patch failed: ${String(e)}`);
+          } catch (_) {
+          }
+        }
+      };
+      doc.addEventListener("popupshowing", onPopupShowing, true);
+      this._orig.newItemMenuDocument = doc;
+      this._orig.newItemMenuPopupShowing = onPopupShowing;
+    }
+    _patchNewItemBuilders() {
+      const mainWindow = Zotero.getMainWindow?.();
+      const doc = mainWindow?.document;
+      const zoteroPaneLocal = mainWindow?.ZoteroPane_Local || mainWindow?.ZoteroPane;
+      let patched = false;
+      if (this._orig.updateNewItemTypesOwner === zoteroPaneLocal && this._orig.updateNewItemTypes) {
+        patched = true;
+      }
+      if (zoteroPaneLocal?.updateNewItemTypes && this._orig.updateNewItemTypesOwner !== zoteroPaneLocal) {
+        if (this._orig.updateNewItemTypesOwner && this._orig.updateNewItemTypes) {
+          this._orig.updateNewItemTypesOwner.updateNewItemTypes = this._orig.updateNewItemTypes;
+        }
+        this._orig.updateNewItemTypes = zoteroPaneLocal.updateNewItemTypes;
+        this._orig.updateNewItemTypesOwner = zoteroPaneLocal;
+        const self = this;
+        zoteroPaneLocal.updateNewItemTypes = function(...args) {
+          const result = self._orig.updateNewItemTypes.apply(this, args);
+          try {
+            const popup = doc?.getElementById?.("zotero-tb-add")?.firstElementChild || null;
+            self._augmentKnownNewItemPopup(popup, "toolbar");
+          } catch (e) {
+            try {
+              Zotero.debug(`[IndigoBook CSL-M] toolbar new-item patch failed: ${String(e)}`);
+            } catch (_) {
+            }
+          }
+          return result;
+        };
+        patched = true;
+      }
+      const zoteroStandalone = mainWindow?.ZoteroStandalone;
+      if (this._orig.buildNewItemMenuOwner === zoteroStandalone && this._orig.buildNewItemMenu) {
+        patched = true;
+      }
+      if (zoteroStandalone?.buildNewItemMenu && this._orig.buildNewItemMenuOwner !== zoteroStandalone) {
+        if (this._orig.buildNewItemMenuOwner && this._orig.buildNewItemMenu) {
+          this._orig.buildNewItemMenuOwner.buildNewItemMenu = this._orig.buildNewItemMenu;
+        }
+        this._orig.buildNewItemMenu = zoteroStandalone.buildNewItemMenu;
+        this._orig.buildNewItemMenuOwner = zoteroStandalone;
+        const self = this;
+        zoteroStandalone.buildNewItemMenu = function(...args) {
+          const result = self._orig.buildNewItemMenu.apply(this, args);
+          try {
+            const popup = doc?.getElementById?.("menu_NewItemPopup") || null;
+            self._augmentKnownNewItemPopup(popup, "file-menu");
+          } catch (e) {
+            try {
+              Zotero.debug(`[IndigoBook CSL-M] file-menu new-item patch failed: ${String(e)}`);
+            } catch (_) {
+            }
+          }
+          return result;
+        };
+        patched = true;
+      }
+      if (!patched) {
+        this._scheduleItemPaneRenderPatch();
+      }
+    }
+    _unpatchNewItemBuilders() {
+      if (this._orig.updateNewItemTypesOwner && this._orig.updateNewItemTypes) {
+        this._orig.updateNewItemTypesOwner.updateNewItemTypes = this._orig.updateNewItemTypes;
+      }
+      if (this._orig.buildNewItemMenuOwner && this._orig.buildNewItemMenu) {
+        this._orig.buildNewItemMenuOwner.buildNewItemMenu = this._orig.buildNewItemMenu;
+      }
+      delete this._orig.updateNewItemTypes;
+      delete this._orig.updateNewItemTypesOwner;
+      delete this._orig.buildNewItemMenu;
+      delete this._orig.buildNewItemMenuOwner;
+    }
+    _unpatchNewItemMenus() {
+      try {
+        if (this._orig.newItemMenuDocument && this._orig.newItemMenuPopupShowing) {
+          this._orig.newItemMenuDocument.removeEventListener("popupshowing", this._orig.newItemMenuPopupShowing, true);
+        }
+      } catch (e) {
+      } finally {
+        delete this._orig.newItemMenuDocument;
+        delete this._orig.newItemMenuPopupShowing;
+        this._pendingCustomNewItemTypes = [];
+      }
+    }
+    _augmentNewItemPopup(popup) {
+      if (!popup || popup.localName !== "menupopup") return;
+      if (popup.querySelector?.(`[${this._newItemMenuMarkerAttribute}="true"]`)) return;
+      if (popup.querySelector?.("[data-ibcslm-option-key], [data-ibcslm-custom-item-type]")) return;
+      if (popup.closest?.("#itembox-field-itemType-menu")) return;
+      const nativeEntries = this._extractNativeItemTypeMenuEntriesFromPopup(popup);
+      if (!this._isNewItemPopupCandidate(popup, nativeEntries)) return;
+      const customByBase = this._getCustomItemTypeOptionsByBase();
+      if (!customByBase.size) return;
+      const doc = popup.ownerDocument;
+      const inserted = /* @__PURE__ */ new Set();
+      for (const entry of nativeEntries) {
+        const customOptions = customByBase.get(entry.nativeType) || [];
+        let insertAfter = entry.node;
+        for (const option of customOptions) {
+          if (inserted.has(option.itemType)) continue;
+          inserted.add(option.itemType);
+          const menuitem = this._buildCustomNewItemMenuitem(doc, entry.node, option);
+          if (!menuitem) continue;
+          popup.insertBefore(menuitem, insertAfter.nextSibling);
+          insertAfter = menuitem;
+        }
+      }
+      const fallbackAnchor = this._getNewItemPopupInsertAnchor(popup);
+      for (const options of customByBase.values()) {
+        for (const option of options) {
+          if (inserted.has(option.itemType)) continue;
+          inserted.add(option.itemType);
+          const menuitem = this._buildCustomNewItemMenuitem(doc, null, option);
+          if (!menuitem) continue;
+          popup.insertBefore(menuitem, fallbackAnchor);
+        }
+      }
+    }
+    _augmentKnownNewItemPopup(popup, mode = "toolbar") {
+      if (!popup || popup.localName !== "menupopup") return;
+      for (const node of Array.from(popup.querySelectorAll?.(`[${this._newItemMenuMarkerAttribute}="true"]`) || [])) {
+        node.remove();
+      }
+      const nativeEntries = this._extractNativeItemTypeMenuEntriesFromPopup(popup);
+      if (!nativeEntries.length) return;
+      const customByBase = this._getCustomItemTypeOptionsByBase();
+      if (!customByBase.size) return;
+      const doc = popup.ownerDocument;
+      const inserted = /* @__PURE__ */ new Set();
+      for (const entry of nativeEntries) {
+        const customOptions = customByBase.get(entry.nativeType) || [];
+        let insertAfter = entry.node;
+        for (const option of customOptions) {
+          if (inserted.has(option.itemType)) continue;
+          inserted.add(option.itemType);
+          const menuitem = this._buildCustomNewItemMenuitemForKnownMenu(doc, option, mode, entry.node);
+          if (!menuitem) continue;
+          popup.insertBefore(menuitem, insertAfter.nextSibling);
+          insertAfter = menuitem;
+        }
+      }
+    }
+    _buildCustomNewItemMenuitemForKnownMenu(doc, option, mode = "toolbar", templateNode = null) {
+      if (!doc || !option?.itemType || !option?.baseItemType) return null;
+      const menuitem = templateNode?.cloneNode?.(false) || doc.createXULElement("menuitem");
+      menuitem.removeAttribute?.("id");
+      menuitem.removeAttribute?.("command");
+      menuitem.removeAttribute?.("oncommand");
+      menuitem.removeAttribute?.("observes");
+      menuitem.setAttribute(this._newItemMenuMarkerAttribute, "true");
+      menuitem.setAttribute("label", option.label);
+      menuitem.setAttribute("tooltiptext", "");
+      menuitem.setAttribute("typeid", this._getNativeItemTypeMenuValue(option.baseItemType));
+      menuitem.setAttribute("value", this._getCustomItemTypeMenuValue(option.itemType));
+      menuitem.setAttribute("data-ibcslm-base-item-type", option.baseItemType);
+      menuitem.setAttribute("data-ibcslm-custom-item-type", option.itemType);
+      if (mode === "file-menu") {
+        menuitem.className = "zotero-tb-add";
+      } else if (templateNode?.className) {
+        menuitem.className = templateNode.className;
+      }
+      menuitem.addEventListener("command", async (event) => {
+        event?.preventDefault?.();
+        event?.stopPropagation?.();
+        await this._createCustomNewItem(option.itemType, option.baseItemType);
+      });
+      return menuitem;
+    }
+    async _createCustomNewItem(itemType, baseItemType) {
+      const customItemType = String(itemType || "").trim();
+      const nativeType = String(baseItemType || "").trim();
+      if (!customItemType || !nativeType) return null;
+      this._clearPendingCustomNewItemTypesForBase(nativeType);
+      const typeID = Zotero?.ItemTypes?.getID?.(nativeType);
+      const mainWindow = Zotero.getMainWindow?.();
+      const pane = mainWindow?.ZoteroPane_Local || mainWindow?.ZoteroPane;
+      const created = await pane?.newItem?.(typeID ?? nativeType, {}, null, true);
+      const item = this._resolveCreatedZoteroItem(created);
+      if (!item || item.deleted) return item || null;
+      const extra = String(item.getField?.("extra") || "");
+      const nextExtra = this.Jurisdiction.updateMLZItemType?.(extra, customItemType) || extra;
+      if (nextExtra !== extra) {
+        item.setField("extra", nextExtra);
+        await item.saveTx({ skipDateModifiedUpdate: true });
+      }
+      this._scheduleActiveInfoPaneRefresh(0, true);
+      try {
+        Zotero.debug(`[IndigoBook CSL-M] created custom new-item type: item=${String(item.id || "")} native=${nativeType} custom=${customItemType}`);
+      } catch (e) {
+      }
+      return item;
+    }
+    _resolveCreatedZoteroItem(created) {
+      if (!created) return null;
+      if (typeof created.getField === "function" && typeof created.setField === "function") return created;
+      return this._getZoteroItemByAnyID(created);
+    }
+    _clearPendingCustomNewItemTypesForBase(baseItemType) {
+      const nativeType = String(baseItemType || "").trim();
+      if (!nativeType || !this._pendingCustomNewItemTypes.length) return;
+      this._pendingCustomNewItemTypes = this._pendingCustomNewItemTypes.filter((entry) => {
+        return String(entry?.baseItemType || "").trim() !== nativeType;
+      });
+    }
+    _extractNativeItemTypeMenuEntriesFromPopup(popup) {
+      const out = [];
+      for (const node of Array.from(popup?.children || [])) {
+        if (node?.localName !== "menuitem") continue;
+        if (node.hasAttribute?.(this._newItemMenuMarkerAttribute)) continue;
+        if (node.hasAttribute?.("data-ibcslm-custom-item-type")) continue;
+        const label = String(node.getAttribute("label") || "").trim();
+        const value = String(
+          node.getAttribute("value") || node.getAttribute("typeid") || node.value || ""
+        ).trim();
+        const nativeType = this._resolveNativeItemTypeName(value, label) || "";
+        if (!nativeType) continue;
+        out.push({ node, nativeType, label, value });
+      }
+      return out;
+    }
+    _isNewItemPopupCandidate(popup, nativeEntries) {
+      if (!popup || !nativeEntries.length) return false;
+      const idish = [
+        popup.id,
+        popup.getAttribute?.("id"),
+        popup.getAttribute?.("context"),
+        popup.parentNode?.id,
+        popup.parentNode?.getAttribute?.("id"),
+        popup.triggerNode?.id,
+        popup.triggerNode?.getAttribute?.("id"),
+        popup.anchorNode?.id,
+        popup.anchorNode?.getAttribute?.("id")
+      ].filter(Boolean).join(" ").toLowerCase();
+      if (/(^|[\s_-])(new|add)([\s_-])?item/.test(idish) || /(item)([\s_-])?(new|add)/.test(idish) || /zotero-tb-add|newitem/.test(idish)) {
+        return true;
+      }
+      const childNames = Array.from(popup.children || []).map((node) => node?.localName || "");
+      const onlyMenuChildren = childNames.every((name) => ["menuitem", "menuseparator"].includes(name));
+      return onlyMenuChildren && nativeEntries.length >= 8;
+    }
+    _getCustomItemTypeOptionsByBase() {
+      const out = /* @__PURE__ */ new Map();
+      for (const option of this.schemaConfig?.getCustomItemTypeOptions?.(Zotero?.locale || "en-US") || []) {
+        const baseType = String(option.baseItemType || "").trim();
+        const itemType = String(option.itemType || "").trim();
+        if (!baseType || !itemType) continue;
+        if (!out.has(baseType)) out.set(baseType, []);
+        out.get(baseType).push({
+          itemType,
+          baseItemType: baseType,
+          label: String(option.label || "").trim() || itemType
+        });
+      }
+      return out;
+    }
+    _buildCustomNewItemMenuitem(doc, templateNode, option) {
+      if (!doc || !option?.itemType || !option?.baseItemType) return null;
+      const menuitem = templateNode?.cloneNode?.(true) || doc.createXULElement("menuitem");
+      menuitem.setAttribute(this._newItemMenuMarkerAttribute, "true");
+      menuitem.setAttribute("label", option.label);
+      menuitem.setAttribute("tooltiptext", option.itemType);
+      menuitem.setAttribute("typeid", this._getNativeItemTypeMenuValue(option.baseItemType));
+      menuitem.setAttribute("value", this._getNativeItemTypeMenuValue(option.baseItemType));
+      menuitem.setAttribute("data-ibcslm-custom-item-type", option.itemType);
+      menuitem.addEventListener("command", () => {
+        this._queuePendingCustomNewItemType(option.itemType, option.baseItemType);
+      });
+      return menuitem;
+    }
+    _getNewItemPopupInsertAnchor(popup) {
+      for (const node of Array.from(popup?.children || [])) {
+        if (node?.localName === "menuseparator") return node;
+      }
+      return null;
+    }
+    _queuePendingCustomNewItemType(itemType, baseItemType) {
+      const customItemType = String(itemType || "").trim();
+      const nativeType = String(baseItemType || "").trim();
+      if (!customItemType || !nativeType) return;
+      this._pendingCustomNewItemTypes = this._pendingCustomNewItemTypes.filter((entry) => {
+        return String(entry?.baseItemType || "").trim() !== nativeType;
+      });
+      this._pendingCustomNewItemTypes.push({
+        itemType: customItemType,
+        baseItemType: nativeType,
+        createdAt: Date.now()
+      });
+      while (this._pendingCustomNewItemTypes.length > 8) {
+        this._pendingCustomNewItemTypes.shift();
+      }
+    }
+    async _applyPendingCustomNewItemType(itemID) {
+      if (!this._pendingCustomNewItemTypes.length) return false;
+      const item = this._getZoteroItemByAnyID(itemID);
+      if (!item || item.deleted) return false;
+      const now = Date.now();
+      this._pendingCustomNewItemTypes = this._pendingCustomNewItemTypes.filter(
+        (entry) => entry && now - Number(entry.createdAt || 0) < 15e3
+      );
+      if (!this._pendingCustomNewItemTypes.length) return false;
+      const nativeItemType = this._getItemTypeNameByID(item.itemTypeID);
+      let matchIndex = -1;
+      for (let idx = this._pendingCustomNewItemTypes.length - 1; idx >= 0; idx -= 1) {
+        if (String(this._pendingCustomNewItemTypes[idx]?.baseItemType || "").trim() === nativeItemType) {
+          matchIndex = idx;
+          break;
+        }
+      }
+      if (matchIndex === -1) return false;
+      const [match] = this._pendingCustomNewItemTypes.splice(matchIndex, 1);
+      const extra = String(item.getField?.("extra") || "");
+      const nextExtra = this.Jurisdiction.updateMLZItemType?.(extra, match.itemType) || extra;
+      if (nextExtra === extra) return false;
+      item.setField("extra", nextExtra);
+      await item.saveTx({ skipDateModifiedUpdate: true });
+      try {
+        Zotero.debug(`[IndigoBook CSL-M] applied custom new-item type: item=${String(item.id || "")} native=${nativeItemType} custom=${match.itemType}`);
+      } catch (e) {
+      }
+      return true;
     }
     _patchItemPaneRender() {
       if (this._orig.itemDetailsRender && this._orig.itemDetailsOwner) return;
@@ -2437,6 +2825,7 @@ ${mlzBlock}` : mlzBlock;
         }
         return self._orig.itemDetailsRender.apply(this, args);
       };
+      this._patchNewItemMenus();
     }
     _patchInfoBoxRender() {
       if (this._orig.infoBoxRender && this._orig.infoBoxOwner) return;
@@ -2470,6 +2859,7 @@ ${mlzBlock}` : mlzBlock;
         }
         return result;
       };
+      this._patchNewItemMenus();
     }
     _scheduleItemPaneRenderPatch() {
       if (this._orig.itemDetailsRender && this._orig.itemDetailsOwner && (this._orig.infoBoxRender && this._orig.infoBoxOwner)) return;
@@ -2478,6 +2868,7 @@ ${mlzBlock}` : mlzBlock;
       this._itemPanePatchAttempts += 1;
       this._itemPanePatchTimer = setTimeout(() => {
         this._itemPanePatchTimer = null;
+        this._patchNewItemBuilders();
         this._patchItemPaneRender();
         this._patchInfoBoxRender();
       }, 500);
@@ -2492,6 +2883,7 @@ ${mlzBlock}` : mlzBlock;
           clearTimeout(this._infoPaneRefreshTimer);
           this._infoPaneRefreshTimer = null;
         }
+        this._forceFullInfoPaneRefresh = false;
         if (this._orig.itemDetailsOwner && this._orig.itemDetailsRender) {
           this._orig.itemDetailsOwner.render = this._orig.itemDetailsRender;
         }
@@ -2528,19 +2920,26 @@ ${mlzBlock}` : mlzBlock;
         this._syncInFlight.clear();
       }
     }
-    _scheduleActiveInfoPaneRefresh(delay = 0) {
+    _scheduleActiveInfoPaneRefresh(delay = 0, forceFullRender = false) {
       if (this._infoPaneRefreshTimer) {
         clearTimeout(this._infoPaneRefreshTimer);
       }
+      this._forceFullInfoPaneRefresh = this._forceFullInfoPaneRefresh || !!forceFullRender;
       this._infoPaneRefreshTimer = setTimeout(() => {
         this._infoPaneRefreshTimer = null;
-        this._refreshActiveInfoPane();
+        const shouldForceFullRender = this._forceFullInfoPaneRefresh;
+        this._forceFullInfoPaneRefresh = false;
+        this._refreshActiveInfoPane(shouldForceFullRender);
       }, Math.max(0, Number(delay) || 0));
     }
-    _refreshActiveInfoPane() {
+    _refreshActiveInfoPane(forceFullRender = false) {
       try {
         const infoBox = this._getActiveInfoBox?.();
         if (!infoBox) return;
+        if (forceFullRender && typeof infoBox.render === "function") {
+          infoBox.render();
+          return;
+        }
         this._refreshCustomInfoRows(infoBox);
       } catch (e) {
       }
@@ -2549,6 +2948,7 @@ ${mlzBlock}` : mlzBlock;
     }
     _refreshCustomInfoRows(infoBox) {
       if (!infoBox) return;
+      this._renderItemTypeField(infoBox);
       this._renderJurisdictionField(infoBox);
       this._renderCourtField(infoBox);
       this._renderSchemaFieldRows(infoBox);
@@ -2746,25 +3146,22 @@ ${mlzBlock}` : mlzBlock;
     }
     _renderJurisdictionField(infoBox) {
       const item = infoBox?.item;
-      const itemTypeName = item ? Zotero?.ItemTypes?.getName?.(item.itemTypeID) : null;
-      if (!item || item.deleted || itemTypeName !== "case") {
+      const itemTypeName = this._getItemTypeName(item);
+      const definition = item ? this.schemaConfig?.getFieldDefinition?.(itemTypeName, "jurisdiction") : null;
+      if (!item || item.deleted || !definition) {
         this._removeJurisdictionField(infoBox);
         return;
       }
       const table = this._getInfoTable(infoBox);
       if (!table) return;
       const row = this._getOrCreateJurisdictionRow(infoBox);
-      const beforeRow = this._findInfoFieldRow(infoBox, "court");
-      if (beforeRow && beforeRow.parentNode === table) {
-        table.insertBefore(row, beforeRow);
-      } else if (row.parentNode !== table) {
+      if (row.parentNode !== table) {
         table.appendChild(row);
       }
-      this._updateJurisdictionRow(infoBox, row, item);
+      this._updateJurisdictionRow(infoBox, row, item, definition);
     }
     _renderExtraPersonCreatorRows(infoBox) {
-      const itemTypeID = infoBox?.item?.itemTypeID;
-      const allowed = this._getExtraPersonTypesForItemType(itemTypeID);
+      const allowed = this._getExtraPersonTypesForItem(infoBox?.item);
       const allowedKeys = new Set(allowed.map((entry) => entry.key));
       for (const extraPersonType of this._extraPersonTypes) {
         if (!allowedKeys.has(extraPersonType.key)) {
@@ -2777,7 +3174,7 @@ ${mlzBlock}` : mlzBlock;
     }
     _renderExtraPersonCreatorRow(infoBox, extraPersonType) {
       const item = infoBox?.item;
-      if (!item || item.deleted || !this._itemTypeSupportsExtraPerson(item.itemTypeID)) {
+      if (!item || item.deleted || !this._itemTypeSupportsExtraPerson(item)) {
         this._removeExtraPersonCreatorRows(infoBox, extraPersonType);
         return;
       }
@@ -2909,11 +3306,11 @@ ${mlzBlock}` : mlzBlock;
     }
     _ensureExtraPersonMenuItems(infoBox) {
       const item = infoBox?.item;
-      if (!item || !this._itemTypeSupportsExtraPerson(item.itemTypeID) || !infoBox.editable) return;
+      if (!item || !this._itemTypeSupportsExtraPerson(item) || !infoBox.editable) return;
       const menu = infoBox._creatorTypeMenu;
       if (!menu) return;
       const doc = menu.ownerDocument || infoBox.ownerDocument;
-      for (const extraPersonType of this._getExtraPersonTypesForItemType(item.itemTypeID)) {
+      for (const extraPersonType of this._getExtraPersonTypesForItem(item)) {
         const existing = Array.from(menu.children || []).some((node) => {
           return String(node?.getAttribute?.("typeid") || "") === extraPersonType.creatorTypeID;
         });
@@ -3091,14 +3488,20 @@ ${mlzBlock}` : mlzBlock;
       container.appendChild(setButton);
       dataWrapper.appendChild(container);
     }
-    _updateJurisdictionRow(infoBox, row, item) {
+    _updateJurisdictionRow(infoBox, row, item, definition = null) {
       const dataWrapper = row.querySelector(".meta-data");
       if (!dataWrapper) return;
       const currentJurisdiction = this._getDisplayedJurisdictionCode(item);
       const displayValue = this.abbrevService.formatJurisdictionDisplay(currentJurisdiction);
       dataWrapper.textContent = "";
       if (infoBox.editable) {
-        dataWrapper.appendChild(this._buildJurisdictionMenuList(infoBox, item, currentJurisdiction, displayValue));
+        const itemTypeName = this._getItemTypeName(item);
+        if (itemTypeName === "case") {
+          dataWrapper.appendChild(this._buildJurisdictionMenuList(infoBox, item, currentJurisdiction, displayValue));
+        } else {
+          const effectiveDefinition = definition || this.schemaConfig?.getFieldDefinition?.(itemTypeName, "jurisdiction") || { field: "jurisdiction" };
+          dataWrapper.appendChild(this._buildSchemaJurisdictionMenuList(infoBox, item, effectiveDefinition, currentJurisdiction, displayValue));
+        }
         return;
       }
       if (typeof infoBox.createValueElement === "function") {
@@ -3266,7 +3669,7 @@ ${mlzBlock}` : mlzBlock;
           item.setField("extra", nextExtra);
           item.setField("court", "");
           await item.saveTx({ skipDateModifiedUpdate: true });
-          this._scheduleActiveInfoPaneRefresh(75);
+          this._scheduleActiveInfoPaneRefresh(75, true);
           return;
         }
         await this._saveCourtFromMenu(item, selectedValue);
@@ -3623,11 +4026,20 @@ ${mlzBlock}` : mlzBlock;
       if (!extraPersonType?.key) return "";
       return this.schemaConfig?.getLocalizedCreatorLabel?.(extraPersonType.key, Zotero?.locale || "en-US") || extraPersonType.label || String(extraPersonType.key || "");
     }
-    _itemTypeSupportsExtraPerson(itemTypeID) {
-      return this._getExtraPersonTypesForItemType(itemTypeID).length > 0;
+    _getLocalizedItemTypeLabel(itemTypeName, locale = Zotero?.locale || "en-US") {
+      const key = String(itemTypeName || "").trim();
+      if (!key) return "";
+      return this.schemaConfig?.getLocalizedItemTypeLabel?.(key, locale) || key;
     }
-    _getExtraPersonTypesForItemType(itemTypeID) {
-      const itemTypeName = this._getItemTypeNameByID(itemTypeID);
+    _itemTypeSupportsExtraPerson(itemOrTypeID) {
+      return this._getExtraPersonTypesForItemType(itemOrTypeID).length > 0;
+    }
+    _getExtraPersonTypesForItem(item) {
+      return this._getExtraPersonTypesForItemType(item?.itemTypeID, item);
+    }
+    _getExtraPersonTypesForItemType(itemOrTypeID, item = null) {
+      const itemTypeID = typeof itemOrTypeID === "object" ? itemOrTypeID?.itemTypeID : itemOrTypeID;
+      const itemTypeName = item ? this._getItemTypeName(item) : this._getItemTypeNameByID(itemTypeID);
       if (!itemTypeName) return [];
       const creatorKeys = new Set(this.schemaConfig?.getCreatorKeysForItemType?.(itemTypeName) || []);
       if (!creatorKeys.size) return [];
@@ -3648,7 +4060,13 @@ ${mlzBlock}` : mlzBlock;
       return false;
     }
     _getItemTypeName(item) {
-      return this._getItemTypeNameByID(item?.itemTypeID);
+      const nativeItemType = this._getItemTypeNameByID(item?.itemTypeID);
+      const storedItemType = String(this.Jurisdiction.getMLZItemType?.(item) || "").trim();
+      if (!storedItemType || !this.schemaConfig?.isCustomItemType?.(storedItemType)) {
+        return nativeItemType;
+      }
+      const expectedNativeType = this.schemaConfig?.getBaseItemType?.(storedItemType) || "";
+      return expectedNativeType === nativeItemType ? storedItemType : nativeItemType;
     }
     _getItemTypeNameByID(itemTypeID) {
       try {
@@ -3669,7 +4087,7 @@ ${mlzBlock}` : mlzBlock;
         item.setField("extra", nextExtra);
         item.setField("court", "");
         await item.saveTx({ skipDateModifiedUpdate: true });
-        this._scheduleActiveInfoPaneRefresh(75);
+        this._scheduleActiveInfoPaneRefresh(75, true);
         try {
           Zotero.debug(`[IndigoBook CSL-M] jurisdiction row saved: item=${String(item.id)} jurisdiction=${selectedCode}`);
         } catch (e) {
@@ -3706,7 +4124,7 @@ ${mlzBlock}` : mlzBlock;
           if (!targetOptions.length) {
             item.setField("court", "");
             await item.saveTx({ skipDateModifiedUpdate: true });
-            this._scheduleActiveInfoPaneRefresh(75);
+            this._scheduleActiveInfoPaneRefresh(75, true);
             try {
               Zotero.debug(`[IndigoBook CSL-M] court row cleared for jurisdiction with no institution-part: item=${String(item.id)} jurisdiction=${targetJurisdiction}`);
             } catch (e) {
@@ -3716,7 +4134,7 @@ ${mlzBlock}` : mlzBlock;
         }
         item.setField("court", normalizedKey);
         await item.saveTx({ skipDateModifiedUpdate: true });
-        this._scheduleActiveInfoPaneRefresh(75);
+        this._scheduleActiveInfoPaneRefresh(75, true);
         try {
           Zotero.debug(`[IndigoBook CSL-M] court row saved: item=${String(item.id)} court=${normalizedKey} jurisdiction=${targetJurisdiction || "unchanged"}`);
         } catch (e) {
@@ -3750,6 +4168,339 @@ ${mlzBlock}` : mlzBlock;
       } catch (e) {
       }
       return null;
+    }
+    _renderItemTypeField(infoBox) {
+      const item = infoBox?.item;
+      const row = this._findItemTypeRow(infoBox);
+      if (!row || !item || item.deleted) return;
+      const dataWrapper = row.querySelector(".meta-data");
+      if (!dataWrapper) return;
+      const displayedItemType = this._getItemTypeName(item);
+      const displayedLabel = this._getLocalizedItemTypeLabel(displayedItemType);
+      if (!displayedLabel) return;
+      if (infoBox.editable) {
+        const nativeOptions = this._getNativeItemTypeOptions(infoBox, row, item);
+        if (!nativeOptions.length) return;
+        dataWrapper.textContent = "";
+        dataWrapper.appendChild(this._buildItemTypeMenuList(infoBox, item, nativeOptions));
+        return;
+      }
+      if (!this.schemaConfig?.isCustomItemType?.(displayedItemType)) return;
+      dataWrapper.textContent = "";
+      if (typeof infoBox.createValueElement === "function") {
+        const valueElem = infoBox.createValueElement({
+          editable: false,
+          text: displayedLabel,
+          id: "itembox-field-item-type-value",
+          attributes: {
+            "aria-labelledby": "itembox-field-itemType-label",
+            fieldname: "itemType",
+            title: displayedItemType
+          }
+        });
+        valueElem.value = displayedLabel;
+        dataWrapper.appendChild(valueElem);
+        return;
+      }
+      const input = row.ownerDocument.createElement("input");
+      input.className = "value";
+      input.readOnly = true;
+      input.value = displayedLabel;
+      input.title = displayedItemType;
+      dataWrapper.appendChild(input);
+    }
+    _findItemTypeRow(infoBox) {
+      return this._findInfoFieldRow(infoBox, "itemType") || this._findInfoFieldRow(infoBox, "itemTypeID") || infoBox?.querySelector?.('.meta-label[fieldname="itemType"]')?.closest?.(".meta-row") || infoBox?.querySelector?.('.meta-label[fieldname="itemTypeID"]')?.closest?.(".meta-row") || infoBox?.querySelector?.("#itembox-field-itemType-label")?.closest?.(".meta-row") || null;
+    }
+    _getNativeItemTypeOptions(infoBox, row, item) {
+      const fromRow = this._extractNativeItemTypeOptionsFromRow(row, item);
+      if (fromRow.length) return fromRow;
+      const locale = Zotero?.locale || "en-US";
+      const fallback = [];
+      for (const itemTypeName of this.schemaConfig?.getKnownItemTypeNames?.() || []) {
+        if (this.schemaConfig?.isCustomItemType?.(itemTypeName)) continue;
+        fallback.push({
+          kind: "native",
+          value: this._getNativeItemTypeMenuValue(itemTypeName),
+          label: this._getLocalizedItemTypeLabel(itemTypeName, locale),
+          nativeType: itemTypeName
+        });
+      }
+      return this._dedupeAndSortItemTypeOptions(fallback);
+    }
+    _extractNativeItemTypeOptionsFromRow(row, item) {
+      const popup = row?.querySelector?.("menupopup");
+      const out = [];
+      for (const node of Array.from(popup?.children || [])) {
+        if (node?.localName !== "menuitem") continue;
+        if (node.hasAttribute?.("data-ibcslm-custom-item-type")) continue;
+        const label = String(node.getAttribute("label") || "").trim();
+        if (!label) continue;
+        const value = String(
+          node.getAttribute("value") || node.getAttribute("typeid") || node.value || ""
+        ).trim();
+        const nativeType = this._resolveNativeItemTypeName(value, label) || "";
+        if (!nativeType) continue;
+        out.push({
+          kind: "native",
+          value: value || this._getNativeItemTypeMenuValue(nativeType),
+          label,
+          nativeType
+        });
+      }
+      if (out.length) return this._dedupeAndSortItemTypeOptions(out);
+      const currentNativeType = this._getItemTypeNameByID(item?.itemTypeID);
+      const currentLabel = this._getLocalizedItemTypeLabel(currentNativeType);
+      if (!currentNativeType || !currentLabel) return [];
+      return this._dedupeAndSortItemTypeOptions([{
+        kind: "native",
+        value: this._getNativeItemTypeMenuValue(currentNativeType),
+        label: currentLabel,
+        nativeType: currentNativeType
+      }]);
+    }
+    _buildItemTypeMenuList(infoBox, item, nativeOptions) {
+      const doc = infoBox.ownerDocument;
+      const menulist = doc.createXULElement("menulist");
+      menulist.id = "itembox-field-itemType-menu";
+      menulist.className = "zotero-clicky keyboard-clickable";
+      menulist.setAttribute("aria-labelledby", "itembox-field-itemType-label");
+      menulist.setAttribute("fieldname", "itemType");
+      menulist.style.flex = "1";
+      const popup = menulist.appendChild(doc.createXULElement("menupopup"));
+      const options = this._buildFullItemTypeOptions(nativeOptions);
+      const optionIndex = /* @__PURE__ */ new Map();
+      for (const option of options) {
+        const optionKey = this._getItemTypeOptionKey(option);
+        optionIndex.set(optionKey, option);
+        const menuitem = doc.createXULElement("menuitem");
+        menuitem.setAttribute("value", option.value);
+        menuitem.setAttribute("label", option.label);
+        menuitem.setAttribute("tooltiptext", option.kind === "custom" ? option.itemType : option.nativeType);
+        menuitem.setAttribute("data-ibcslm-option-key", optionKey);
+        if (option.kind === "custom") {
+          menuitem.setAttribute("data-ibcslm-custom-item-type", option.itemType);
+        }
+        menuitem.addEventListener("command", async () => {
+          menulist.value = option.value;
+          menulist.setAttribute("label", option.label);
+          menulist.setAttribute("data-ibcslm-option-key", optionKey);
+          await this._saveItemTypeSelection(item, option);
+        });
+        popup.appendChild(menuitem);
+      }
+      const currentOption = this._getCurrentItemTypeOption(item, nativeOptions);
+      if (currentOption) {
+        menulist.value = currentOption.value;
+        menulist.setAttribute("label", currentOption.label);
+        menulist.setAttribute("data-ibcslm-option-key", this._getItemTypeOptionKey(currentOption));
+      }
+      const saveSelection = async () => {
+        const selectedKey = String(
+          menulist.selectedItem?.getAttribute?.("data-ibcslm-option-key") || menulist.getAttribute?.("data-ibcslm-option-key") || ""
+        ).trim();
+        const selectedOption = optionIndex.get(selectedKey);
+        if (!selectedOption) return;
+        menulist.value = selectedOption.value;
+        menulist.setAttribute("label", selectedOption.label);
+        menulist.setAttribute("data-ibcslm-option-key", selectedKey);
+        await this._saveItemTypeSelection(item, selectedOption);
+      };
+      popup.addEventListener("command", saveSelection);
+      return menulist;
+    }
+    _buildFullItemTypeOptions(nativeOptions) {
+      const locale = Zotero?.locale || "en-US";
+      const customByBase = /* @__PURE__ */ new Map();
+      for (const option of this.schemaConfig?.getCustomItemTypeOptions?.(locale) || []) {
+        const baseType = String(option.baseItemType || "").trim();
+        if (!baseType) continue;
+        if (!customByBase.has(baseType)) customByBase.set(baseType, []);
+        customByBase.get(baseType).push({
+          kind: "custom",
+          value: this._getCustomItemTypeMenuValue(option.itemType),
+          label: option.label,
+          itemType: option.itemType,
+          nativeType: baseType,
+          zoteroValue: this._getNativeItemTypeMenuValue(baseType)
+        });
+      }
+      const out = [];
+      const seenCustom = /* @__PURE__ */ new Set();
+      for (const nativeOption of nativeOptions) {
+        out.push(nativeOption);
+        const customOptions = customByBase.get(nativeOption.nativeType) || [];
+        for (const customOption of customOptions) {
+          if (seenCustom.has(customOption.itemType)) continue;
+          seenCustom.add(customOption.itemType);
+          out.push(customOption);
+        }
+      }
+      for (const options of customByBase.values()) {
+        for (const customOption of options) {
+          if (seenCustom.has(customOption.itemType)) continue;
+          seenCustom.add(customOption.itemType);
+          out.push(customOption);
+        }
+      }
+      return this._dedupeAndSortItemTypeOptions(out);
+    }
+    _dedupeAndSortItemTypeOptions(options) {
+      const byValue = /* @__PURE__ */ new Map();
+      for (const option of Array.isArray(options) ? options : []) {
+        const value = String(this._getItemTypeOptionKey(option) || "").trim();
+        const label = String(option?.label || "").trim();
+        if (!value || !label) continue;
+        const existing = byValue.get(value);
+        if (!existing) {
+          byValue.set(value, { ...option, value, label });
+          continue;
+        }
+        const existingLabel = String(existing.label || "").trim();
+        if (label.length > existingLabel.length) {
+          byValue.set(value, { ...existing, ...option, value, label });
+        }
+      }
+      return Array.from(byValue.values()).sort((a, b) => {
+        const labelCompare = String(a.label || "").localeCompare(String(b.label || ""), void 0, { sensitivity: "base" });
+        if (labelCompare) return labelCompare;
+        return String(a.value || "").localeCompare(String(b.value || ""), void 0, { sensitivity: "base" });
+      });
+    }
+    _getItemTypeOptionKey(option) {
+      if (!option) return "";
+      if (option.kind === "custom") {
+        return this._getCustomItemTypeMenuValue(option.itemType);
+      }
+      return String(option.nativeType || option.value || "").trim();
+    }
+    _getCurrentItemTypeOption(item, nativeOptions) {
+      const itemTypeName = this._getItemTypeName(item);
+      if (this.schemaConfig?.isCustomItemType?.(itemTypeName)) {
+        const baseItemType = this.schemaConfig?.getBaseItemType?.(itemTypeName) || "";
+        return {
+          kind: "custom",
+          itemType: itemTypeName,
+          nativeType: baseItemType,
+          value: this._getCustomItemTypeMenuValue(itemTypeName),
+          zoteroValue: this._getNativeItemTypeMenuValue(baseItemType),
+          label: this._getLocalizedItemTypeLabel(itemTypeName)
+        };
+      }
+      const nativeItemType = this._getItemTypeNameByID(item?.itemTypeID);
+      const direct = nativeOptions.find((option) => option.nativeType === nativeItemType);
+      return direct || {
+        kind: "native",
+        nativeType: nativeItemType,
+        value: this._getNativeItemTypeMenuValue(nativeItemType),
+        zoteroValue: this._getNativeItemTypeMenuValue(nativeItemType),
+        label: this._getLocalizedItemTypeLabel(nativeItemType)
+      };
+    }
+    _getNativeItemTypeMenuValue(itemTypeName) {
+      const key = String(itemTypeName || "").trim();
+      if (!key) return "";
+      try {
+        const itemTypeID = Zotero?.ItemTypes?.getID?.(key);
+        if (itemTypeID != null && itemTypeID !== "") return String(itemTypeID);
+      } catch (e) {
+      }
+      return key;
+    }
+    _getCustomItemTypeMenuValue(itemTypeName) {
+      const key = String(itemTypeName || "").trim();
+      return key ? `${this._customItemTypeMenuValuePrefix}${key}` : "";
+    }
+    _parseCustomItemTypeMenuValue(value) {
+      const raw = String(value || "").trim();
+      if (!raw.startsWith(this._customItemTypeMenuValuePrefix)) return "";
+      return raw.slice(this._customItemTypeMenuValuePrefix.length).trim();
+    }
+    _resolveNativeItemTypeName(value, label = "") {
+      const rawValue = String(value || "").trim();
+      if (rawValue) {
+        try {
+          const byNumericID = /^\d+$/.test(rawValue) ? Zotero?.ItemTypes?.getName?.(Number(rawValue)) : null;
+          if (byNumericID) return String(byNumericID).trim();
+        } catch (e) {
+        }
+        try {
+          const byDirectName = Zotero?.ItemTypes?.getID?.(rawValue) != null ? rawValue : "";
+          if (byDirectName) return String(byDirectName).trim();
+        } catch (e) {
+        }
+      }
+      const normalizedLabel = String(label || "").trim().toLowerCase();
+      if (!normalizedLabel) return "";
+      try {
+        for (const itemType of Zotero?.ItemTypes?.getTypes?.() || []) {
+          const itemTypeName = String(itemType?.name || "").trim();
+          const itemTypeID = itemType?.id;
+          const candidateLabel = String(Zotero?.ItemTypes?.getLocalizedString?.(itemTypeID) || "").trim().toLowerCase();
+          if (itemTypeName && candidateLabel && candidateLabel === normalizedLabel) {
+            return itemTypeName;
+          }
+        }
+      } catch (e) {
+      }
+      for (const itemTypeName of this.schemaConfig?.getKnownItemTypeNames?.() || []) {
+        if (this.schemaConfig?.isCustomItemType?.(itemTypeName)) continue;
+        const candidateLabel = this._getLocalizedItemTypeLabel(itemTypeName).trim().toLowerCase();
+        if (candidateLabel && candidateLabel === normalizedLabel) {
+          return itemTypeName;
+        }
+      }
+      return "";
+    }
+    async _saveItemTypeSelection(item, option) {
+      if (!item || !option) return;
+      const targetNativeType = String(option.nativeType || "").trim();
+      const targetCustomType = option.kind === "custom" ? String(option.itemType || "").trim() : "";
+      const currentNativeType = this._getItemTypeNameByID(item.itemTypeID);
+      const currentCustomType = String(this.Jurisdiction.getMLZItemType?.(item) || "").trim();
+      if (currentNativeType === targetNativeType && currentCustomType === targetCustomType) return;
+      try {
+        if (targetNativeType && currentNativeType !== targetNativeType) {
+          await this._setNativeItemType(item, targetNativeType);
+        }
+        const extra = String(item.getField?.("extra") || "");
+        const nextExtra = this.Jurisdiction.updateMLZItemType?.(extra, targetCustomType) || extra;
+        if (nextExtra !== extra) {
+          item.setField("extra", nextExtra);
+        }
+        await item.saveTx({ skipDateModifiedUpdate: true });
+        this._scheduleActiveInfoPaneRefresh(75, true);
+        try {
+          Zotero.debug(`[IndigoBook CSL-M] item type saved: item=${String(item.id || "")} native=${targetNativeType} custom=${targetCustomType || "(none)"}`);
+        } catch (e) {
+        }
+      } catch (e) {
+        try {
+          Zotero.logError(e);
+        } catch (_) {
+        }
+        try {
+          Zotero.debug(`[IndigoBook CSL-M] item type save failed: ${String(e)}`);
+        } catch (_) {
+        }
+      }
+    }
+    async _setNativeItemType(item, targetItemTypeName) {
+      const target = String(targetItemTypeName || "").trim();
+      if (!item || !target) return;
+      const targetID = Zotero?.ItemTypes?.getID?.(target);
+      if (typeof item.setType === "function") {
+        const result = item.setType(targetID ?? target);
+        if (result && typeof result.then === "function") {
+          await result;
+        }
+        return;
+      }
+      if (targetID != null && "itemTypeID" in item) {
+        item.itemTypeID = targetID;
+        return;
+      }
+      throw new Error(`Unable to set native item type to ${target}`);
     }
     _renderSchemaFieldRows(infoBox) {
       const item = infoBox?.item;
@@ -3853,8 +4604,10 @@ ${mlzBlock}` : mlzBlock;
     _hideSchemaBaseFieldRow(infoBox, item, definition) {
       const fieldName = String(definition?.field || "").trim();
       if (!fieldName || !definition?.baseField) return;
+      if (definition.kind !== "field") return;
       const nativeFieldName = this._resolveNativeFieldName(item.itemTypeID, fieldName, definition.baseField);
       if (!nativeFieldName || nativeFieldName === fieldName) return;
+      if (["title", "caseName"].includes(nativeFieldName)) return;
       const row = this._findInfoFieldRow(infoBox, nativeFieldName);
       if (!row) return;
       row.hidden = true;
@@ -3878,6 +4631,16 @@ ${mlzBlock}` : mlzBlock;
           table.insertBefore(row, anchor);
         }
         anchor = row;
+      }
+      const firstFieldName = String(sequence[0] || "").trim();
+      if (!firstFieldName) return;
+      const firstRow = this._findInfoFieldRow(infoBox, firstFieldName);
+      const itemTypeRow = this._findItemTypeRow(infoBox);
+      if (!firstRow || !itemTypeRow) return;
+      if (firstRow.hidden || firstRow.parentNode !== table || itemTypeRow.parentNode !== table) return;
+      const desiredPosition = itemTypeRow.nextSibling;
+      if (desiredPosition !== firstRow) {
+        table.insertBefore(firstRow, desiredPosition);
       }
     }
     _getFieldNameFromBaseForType(itemTypeID, baseField) {
@@ -4268,7 +5031,7 @@ ${mlzBlock}` : mlzBlock;
       if (!changed) return;
       await item.saveTx({ skipDateModifiedUpdate: true });
       try {
-        this._scheduleActiveInfoPaneRefresh(75);
+        this._scheduleActiveInfoPaneRefresh(75, !!nativeFieldName);
       } catch (e) {
       }
     }
@@ -4312,6 +5075,7 @@ ${mlzBlock}` : mlzBlock;
           cslItem.jurisdiction = jur;
           cslItem.country = jur.split(":")[0];
           this._decorateShortForms(cslItem, jur);
+          this._sanitizeCSLControlFields(cslItem);
           this._logCitationItemData(cslItem, zotItem, "retrieveItem");
           this._logRenderProbeFromItem(cslItem, jur, "retrieveItem");
         } else {
@@ -4341,6 +5105,12 @@ ${mlzBlock}` : mlzBlock;
     _hydrateCSLItemFromZotero(cslItem, zotItem) {
       try {
         const mlzFields = this.Jurisdiction.getMLZExtraFields?.(zotItem) || null;
+        const schemaItemType = this._getItemTypeName(zotItem);
+        const mappedCSLType = this.schemaConfig?.getCSLTypeForItemType?.(schemaItemType) || "";
+        const isCustomSchemaItemType = this.schemaConfig?.isCustomItemType?.(schemaItemType) || false;
+        if (mappedCSLType && isCustomSchemaItemType) {
+          cslItem.type = mappedCSLType;
+        }
         if (!cslItem.title) {
           const title = zotItem.getField?.("title");
           if (title) cslItem.title = title;
@@ -4442,6 +5212,26 @@ ${mlzBlock}` : mlzBlock;
         this._warnRetrieveItem(`collectSeeAlsoURIs failed: ${String(e)}`);
       }
       return out;
+    }
+    _sanitizeCSLControlFields(cslItem) {
+      if (!cslItem || typeof cslItem !== "object") return;
+      const sanitizedNote = this._stripEmbeddedControlText(cslItem.note);
+      if (sanitizedNote == null) {
+        delete cslItem.note;
+      } else {
+        cslItem.note = sanitizedNote;
+      }
+    }
+    _stripEmbeddedControlText(value) {
+      let text = String(value || "");
+      if (!text.trim()) return null;
+      const parsed = this.Jurisdiction?._getMLZPayloadAndRange?.(text);
+      if (parsed?.start != null && parsed?.end != null) {
+        text = this.Jurisdiction._removeMLZBlock?.(text, parsed.start, parsed.end) || text;
+      }
+      text = text.replace(/\b(container-title-short|title-short|hereinafter)\s*:\s*.*$/i, "");
+      text = text.replace(/^[\s"'`]+|[\s"'`]+$/g, "").trim();
+      return text || null;
     }
     _resolveSeeAlsoEntryToURI(value, libraryID = null) {
       if (value == null) return null;
@@ -4959,6 +5749,8 @@ ${mlzBlock}` : mlzBlock;
           title: cslItem?.title ?? null,
           jurisdiction: cslItem?.jurisdiction ?? null,
           authority: cslItem?.authority ?? null,
+          recipient: Array.isArray(cslItem?.recipient) ? cslItem.recipient : [],
+          note: cslItem?.note ?? null,
           "container-title": cslItem?.["container-title"] ?? null,
           "container-title-short": cslItem?.["container-title-short"] ?? null,
           "title-short": cslItem?.["title-short"] ?? null,
@@ -5330,6 +6122,8 @@ ${mlzBlock}` : mlzBlock;
       this.raw = null;
       this.localizationRaw = null;
       this._types = {};
+      this._knownItemTypes = /* @__PURE__ */ new Set();
+      this._customTypesByBaseItemType = /* @__PURE__ */ new Map();
       this._creatorsByItemType = /* @__PURE__ */ new Map();
       this._fieldDefsByItemType = /* @__PURE__ */ new Map();
       this._fieldDefIndexByItemType = /* @__PURE__ */ new Map();
@@ -5340,11 +6134,13 @@ ${mlzBlock}` : mlzBlock;
       this._sequenceByItemType = /* @__PURE__ */ new Map();
       this._localizedFieldsByLocale = /* @__PURE__ */ new Map();
       this._localizedCreatorsByLocale = /* @__PURE__ */ new Map();
+      this._localizedItemTypesByLocale = /* @__PURE__ */ new Map();
     }
     async preload() {
       this.raw = await this.dataStore.loadJSON("content/schema.json");
       this.localizationRaw = await this.dataStore.loadJSON("content/localization.json").catch(() => null);
       this._types = this.raw?.TYPES || {};
+      this._compileItemTypes();
       this._compileCreators();
       this._compileFieldDefinitions();
       this._compileCSLMappings();
@@ -5357,16 +6153,22 @@ ${mlzBlock}` : mlzBlock;
     }
     getCreatorKeysForItemType(itemTypeName) {
       const key = String(itemTypeName || "").trim();
-      return Array.from(this._creatorsByItemType.get(key) || []);
+      const direct = this._creatorsByItemType.get(key);
+      if (direct) return Array.from(direct);
+      const fallbackKey = this.getBaseItemType(key);
+      return Array.from(this._creatorsByItemType.get(fallbackKey) || []);
     }
     getFieldDefinitionsForItemType(itemTypeName) {
       const key = String(itemTypeName || "").trim();
-      return (this._fieldDefsByItemType.get(key) || []).map((entry) => ({ ...entry }));
+      const direct = this._fieldDefsByItemType.get(key);
+      if (direct) return direct.map((entry) => ({ ...entry }));
+      const fallbackKey = this.getBaseItemType(key);
+      return (this._fieldDefsByItemType.get(fallbackKey) || []).map((entry) => ({ ...entry }));
     }
     getFieldDefinition(itemTypeName, fieldName) {
       const key = String(itemTypeName || "").trim();
       const fieldKey = String(fieldName || "").trim();
-      return this._fieldDefIndexByItemType.get(key)?.get(fieldKey) || null;
+      return this._fieldDefIndexByItemType.get(key)?.get(fieldKey) || this._fieldDefIndexByItemType.get(this.getBaseItemType(key))?.get(fieldKey) || null;
     }
     getAllFieldNames() {
       return Array.from(this._allFieldNames.values()).sort((a, b) => a.localeCompare(b));
@@ -5386,6 +6188,53 @@ ${mlzBlock}` : mlzBlock;
       if (!key) return "";
       return this._lookupLocalizedEntry(this._localizedCreatorsByLocale, key, rawLocale) || humanizeKey(key);
     }
+    getLocalizedItemTypeLabel(itemTypeName, rawLocale = null) {
+      const key = String(itemTypeName || "").trim();
+      if (!key) return "";
+      return this._lookupLocalizedEntry(this._localizedItemTypesByLocale, key, rawLocale) || humanizeKey(key);
+    }
+    getKnownItemTypeNames() {
+      return Array.from(this._knownItemTypes.values()).sort((a, b) => a.localeCompare(b));
+    }
+    getItemTypeDefinition(itemTypeName) {
+      const key = String(itemTypeName || "").trim();
+      if (!key) return null;
+      const definition = this._types?.[key] || null;
+      return {
+        itemType: key,
+        zotero: String(definition?.zotero || key).trim(),
+        csl: String(definition?.csl || key).trim(),
+        custom: !!definition
+      };
+    }
+    getBaseItemType(itemTypeName) {
+      return this.getItemTypeDefinition(itemTypeName)?.zotero || "";
+    }
+    getCSLTypeForItemType(itemTypeName) {
+      return this.getItemTypeDefinition(itemTypeName)?.csl || "";
+    }
+    isCustomItemType(itemTypeName) {
+      const key = String(itemTypeName || "").trim();
+      return !!key && Object.prototype.hasOwnProperty.call(this._types || {}, key);
+    }
+    getCustomTypesForBaseItemType(baseItemTypeName) {
+      const key = String(baseItemTypeName || "").trim();
+      return [...this._customTypesByBaseItemType.get(key) || []];
+    }
+    getCustomItemTypeOptions(rawLocale = null) {
+      const locale = rawLocale || null;
+      const out = [];
+      for (const schemaItemType of this.getKnownItemTypeNames()) {
+        if (!this.isCustomItemType(schemaItemType)) continue;
+        out.push({
+          itemType: schemaItemType,
+          baseItemType: this.getBaseItemType(schemaItemType),
+          cslType: this.getCSLTypeForItemType(schemaItemType),
+          label: this.getLocalizedItemTypeLabel(schemaItemType, locale)
+        });
+      }
+      return out;
+    }
     getCSLFieldMappings() {
       return Array.from(this._cslFieldSources.entries()).map(([cslField, fields]) => ({
         cslField,
@@ -5400,12 +6249,34 @@ ${mlzBlock}` : mlzBlock;
     }
     getSequenceForItemType(itemTypeName) {
       const key = String(itemTypeName || "").trim();
-      return [...this._sequenceByItemType.get(key) || []];
+      const direct = this._sequenceByItemType.get(key);
+      if (direct) return [...direct];
+      return [...this._sequenceByItemType.get(this.getBaseItemType(key)) || []];
+    }
+    _compileItemTypes() {
+      this._knownItemTypes.clear();
+      this._customTypesByBaseItemType.clear();
+      for (const entry of Array.isArray(this.localizationRaw?.itemTypes) ? this.localizationRaw.itemTypes : []) {
+        const normalized = this._normalizeItemTypeKey(entry?.itemType);
+        if (normalized) this._knownItemTypes.add(normalized);
+      }
+      for (const schemaItemType of Object.keys(this._types || {})) {
+        const normalized = this._normalizeItemTypeKey(schemaItemType);
+        if (!normalized) continue;
+        this._knownItemTypes.add(normalized);
+        const baseItemType = this.getBaseItemType(normalized);
+        if (!baseItemType || baseItemType === normalized) continue;
+        if (!this._customTypesByBaseItemType.has(baseItemType)) {
+          this._customTypesByBaseItemType.set(baseItemType, []);
+        }
+        const bucket = this._customTypesByBaseItemType.get(baseItemType);
+        if (!bucket.includes(normalized)) bucket.push(normalized);
+      }
     }
     _compileCreators() {
       const creators = this.raw?.CREATORS || {};
       for (const [schemaItemType, creatorList] of Object.entries(creators)) {
-        const itemTypeName = this._resolveZoteroItemType(schemaItemType);
+        const itemTypeName = this._normalizeItemTypeKey(schemaItemType);
         if (!itemTypeName) continue;
         if (!this._creatorsByItemType.has(itemTypeName)) {
           this._creatorsByItemType.set(itemTypeName, /* @__PURE__ */ new Set());
@@ -5419,7 +6290,7 @@ ${mlzBlock}` : mlzBlock;
     }
     _compileFieldDefinitions() {
       const addDefinition = (schemaItemType, definition, kind) => {
-        const itemTypeName = this._resolveZoteroItemType(schemaItemType);
+        const itemTypeName = this._normalizeItemTypeKey(schemaItemType);
         if (!itemTypeName) return;
         const field = String(definition?.field || definition || "").trim();
         if (!field) return;
@@ -5489,7 +6360,7 @@ ${mlzBlock}` : mlzBlock;
     }
     _compileSequence() {
       for (const [schemaItemType, sequence] of Object.entries(this.raw?.SEQUENCE || {})) {
-        const itemTypeName = this._resolveZoteroItemType(schemaItemType);
+        const itemTypeName = this._normalizeItemTypeKey(schemaItemType);
         if (!itemTypeName) continue;
         if (!this._sequenceByItemType.has(itemTypeName)) {
           this._sequenceByItemType.set(itemTypeName, []);
@@ -5506,6 +6377,7 @@ ${mlzBlock}` : mlzBlock;
     _compileLocalization() {
       this._localizedFieldsByLocale.clear();
       this._localizedCreatorsByLocale.clear();
+      this._localizedItemTypesByLocale.clear();
       const localeSources = [
         this.raw?.locales || {},
         this.localizationRaw?.locales || {}
@@ -5528,8 +6400,13 @@ ${mlzBlock}` : mlzBlock;
           schemaPayload?.creatorTypes,
           localizationPayload?.creatorTypes
         );
+        const itemTypes = this._mergeLocalizationBuckets(
+          schemaPayload?.itemTypes,
+          localizationPayload?.itemTypes
+        );
         this._localizedFieldsByLocale.set(normalizedLocale, fields);
         this._localizedCreatorsByLocale.set(normalizedLocale, creatorTypes);
+        this._localizedItemTypesByLocale.set(normalizedLocale, itemTypes);
       }
     }
     _mergeLocalizationBuckets(...sources) {
@@ -5597,11 +6474,8 @@ ${mlzBlock}` : mlzBlock;
       push("en");
       return candidates;
     }
-    _resolveZoteroItemType(schemaItemType) {
-      const key = String(schemaItemType || "").trim();
-      if (!key) return "";
-      const mapped = this._types?.[key]?.zotero;
-      return String(mapped || key).trim();
+    _normalizeItemTypeKey(itemTypeName) {
+      return String(itemTypeName || "").trim();
     }
   };
 

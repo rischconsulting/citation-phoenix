@@ -19,11 +19,8 @@
     "legalCommentary": {
       "zotero": "bookSection",
       "csl": "legal_commentary"
-    },
-    "videoRecording": {
-      "zotero": "videoRecording",
-      "csl": "video"
     }
+    
   },
   "CREATORS": {
     "bill": [
