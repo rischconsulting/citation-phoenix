@@ -2148,11 +2148,13 @@ ${mlzBlock}` : mlzBlock;
 
   // lib/services/patcher.mjs
   var Patcher = class {
-    constructor({ moduleLoader, abbrevService, jurisdiction, caseCourtMapper }) {
+    constructor({ pluginID, moduleLoader, abbrevService, jurisdiction, caseCourtMapper, schemaConfig }) {
+      this.pluginID = String(pluginID || "indigobook-phoenix@risch.example").trim();
       this.moduleLoader = moduleLoader;
       this.abbrevService = abbrevService;
       this.Jurisdiction = jurisdiction;
       this.caseCourtMapper = caseCourtMapper || null;
+      this.schemaConfig = schemaConfig || null;
       this._orig = {};
       this._didWarnNoSyncStyleRead = false;
       this._didWarnRetrieveItem = false;
@@ -2168,37 +2170,15 @@ ${mlzBlock}` : mlzBlock;
       this._maxCitationDataLogs = 80;
       this._itemObserverID = null;
       this._itemPanePatchTimer = null;
+      this._infoPaneRefreshTimer = null;
       this._itemPanePatchAttempts = 0;
       this._maxItemPanePatchAttempts = 20;
-      this._commenterCreatorTypeID = "9001";
-      this._commenterCreatorTypeName = "commenter";
-      this._commenterCreatorTypeLabel = "Commenter";
-      this._translatorCreatorTypeID = "9002";
-      this._translatorCreatorTypeName = "ibcslm-translator";
-      this._translatorCreatorTypeLabel = "Translator";
       this._commenterRowID = "ibcslm-commenter-row";
-      this._extraPersonTypes = [
-        {
-          key: "commenter",
-          creatorTypeID: this._commenterCreatorTypeID,
-          creatorTypeName: this._commenterCreatorTypeName,
-          label: this._commenterCreatorTypeLabel,
-          storage: "creator",
-          mlzType: "commenter",
-          cslField: "commenter"
-        },
-        {
-          key: "translator",
-          creatorTypeID: this._translatorCreatorTypeID,
-          creatorTypeName: this._translatorCreatorTypeName,
-          label: this._translatorCreatorTypeLabel,
-          storage: "creator",
-          mlzType: "translator",
-          cslField: "translator"
-        }
-      ];
+      this._extraPersonTypes = this.schemaConfig?.getExtraCreatorTypes?.() || [];
       this._jurisdictionRowID = "ibcslm-jurisdiction-row";
       this._customCourtRowID = "ibcslm-custom-court-row";
+      this._schemaInfoRowIDPrefix = "ibcslm-schema-row";
+      this._registeredSchemaRowIDs = [];
       this._syncInFlight = /* @__PURE__ */ new Set();
       this._journalAbbrByContainerTitleKey = /* @__PURE__ */ new Map();
     }
@@ -2241,6 +2221,41 @@ ${mlzBlock}` : mlzBlock;
       }
       if (this._orig.getCiteProc) Zotero.Style.prototype.getCiteProc = this._orig.getCiteProc;
     }
+    _registerSchemaInfoRows() {
+      this._registeredSchemaRowIDs = [];
+    }
+    _unregisterSchemaInfoRows() {
+      this._registeredSchemaRowIDs = [];
+    }
+    _getSchemaInfoRowID(fieldName) {
+      return `${this._schemaInfoRowIDPrefix}-${String(fieldName || "").trim()}`;
+    }
+    _getSchemaInfoRowDefinition(item, fieldName) {
+      if (!item || !fieldName) return null;
+      const itemTypeName = this._getItemTypeName(item);
+      return this.schemaConfig?.getFieldDefinition?.(itemTypeName, fieldName) || null;
+    }
+    _shouldUseSchemaInfoRow(item, definition) {
+      if (!item || item.deleted || !definition?.field) return false;
+      const fieldName = String(definition.field || "").trim();
+      if (!fieldName || fieldName === "jurisdiction") return false;
+      const itemTypeName = this._getItemTypeName(item);
+      if (itemTypeName === "case" && fieldName === "court") return false;
+      const nativeFieldName = this._resolveNativeFieldName(item.itemTypeID, fieldName, definition.baseField);
+      return nativeFieldName !== fieldName;
+    }
+    _getSchemaInfoRowDisplayValue(item, fieldName) {
+      const definition = this._getSchemaInfoRowDefinition(item, fieldName);
+      if (!this._shouldUseSchemaInfoRow(item, definition)) return "";
+      const value = this._getSchemaFieldValue(item, fieldName, this.Jurisdiction.getMLZExtraFields?.(item) || null);
+      if (this._isSchemaFlagField(fieldName)) {
+        return this._coerceSchemaFlagValue(value) ? "true" : "";
+      }
+      if (definition?.kind === "date") {
+        return this._formatSchemaDateDisplay(value);
+      }
+      return String(value || "");
+    }
     _patchCreatorTypes() {
       const creatorTypes = Zotero?.CreatorTypes;
       if (!creatorTypes) return;
@@ -2265,14 +2280,14 @@ ${mlzBlock}` : mlzBlock;
       };
       creatorTypes.getLocalizedString = function(creatorType) {
         const extraPersonType = self._getExtraPersonConfigByCreatorType(creatorType);
-        if (extraPersonType) return extraPersonType.label;
+        if (extraPersonType) return self._getExtraPersonLabel(extraPersonType);
         return self._orig.creatorTypesGetLocalizedString?.apply(this, arguments);
       };
       creatorTypes.getTypesForItemType = function(itemTypeID) {
         const result = self._orig.creatorTypesGetTypesForItemType?.apply(this, arguments) || [];
         if (!self._itemTypeSupportsExtraPerson(itemTypeID)) return result;
         const next = [...result];
-        for (const extraPersonType of self._extraPersonTypes) {
+        for (const extraPersonType of self._getExtraPersonTypesForItemType(itemTypeID)) {
           if (next.some((entry) => self._getExtraPersonConfigByCreatorType(entry?.id || entry?.name)?.key === extraPersonType.key)) continue;
           next.push({ id: extraPersonType.creatorTypeID, name: extraPersonType.creatorTypeName });
         }
@@ -2314,6 +2329,7 @@ ${mlzBlock}` : mlzBlock;
             self._ensureExtraPersonMenuItems(this);
             self._removeCommenterField(this);
             self._renderExtraPersonCreatorRows(this);
+            self._refreshCustomInfoRows(this);
           } catch (e) {
             try {
               Zotero.debug(`[IndigoBook CSL-M] info-box commenter render patch failed: ${String(e)}`);
@@ -2380,8 +2396,12 @@ ${mlzBlock}` : mlzBlock;
           const isSyncEvent = ["add", "modify", "refresh", "redraw", "select"].includes(event);
           if (!isSyncEvent) return;
           if (type === "item" && Array.isArray(ids) && ids.length) {
+            let changed = false;
             for (const id of ids) {
-              await self._syncCaseReporterFromFieldsAndMLZ(id);
+              changed = await self._syncItemFromFieldsAndMLZ(id) || changed;
+            }
+            if (changed || event === "modify") {
+              self._scheduleActiveInfoPaneRefresh(75);
             }
             return;
           }
@@ -2407,7 +2427,7 @@ ${mlzBlock}` : mlzBlock;
               Zotero.debug(`[IndigoBook CSL-M] case reporter item-pane render sync: item=${String(itemID)}`);
             } catch (e) {
             }
-            await self._syncCaseReporterFromFieldsAndMLZ(itemID);
+            await self._syncItemFromFieldsAndMLZ(itemID);
           }
         } catch (e) {
           try {
@@ -2441,9 +2461,7 @@ ${mlzBlock}` : mlzBlock;
           self._ensureExtraPersonMenuItems(this);
           self._removeCommenterField(this);
           self._renderExtraPersonCreatorRows(this);
-          self._renderJurisdictionField(this);
-          self._renderCourtField(this);
-          self._renderCustomCourtField(this);
+          self._refreshCustomInfoRows(this);
         } catch (e) {
           try {
             Zotero.debug(`[IndigoBook CSL-M] custom info row render failed: ${String(e)}`);
@@ -2470,6 +2488,10 @@ ${mlzBlock}` : mlzBlock;
           clearTimeout(this._itemPanePatchTimer);
           this._itemPanePatchTimer = null;
         }
+        if (this._infoPaneRefreshTimer) {
+          clearTimeout(this._infoPaneRefreshTimer);
+          this._infoPaneRefreshTimer = null;
+        }
         if (this._orig.itemDetailsOwner && this._orig.itemDetailsRender) {
           this._orig.itemDetailsOwner.render = this._orig.itemDetailsRender;
         }
@@ -2488,6 +2510,7 @@ ${mlzBlock}` : mlzBlock;
         this._removeCommenterField(this._getActiveInfoBox());
         this._removeJurisdictionField(this._getActiveInfoBox());
         this._removeCustomCourtField(this._getActiveInfoBox());
+        this._cleanupRegisteredSchemaInfoRows(this._getActiveInfoBox());
       } catch (e) {
       } finally {
         delete this._orig.infoBoxOwner;
@@ -2505,84 +2528,162 @@ ${mlzBlock}` : mlzBlock;
         this._syncInFlight.clear();
       }
     }
+    _scheduleActiveInfoPaneRefresh(delay = 0) {
+      if (this._infoPaneRefreshTimer) {
+        clearTimeout(this._infoPaneRefreshTimer);
+      }
+      this._infoPaneRefreshTimer = setTimeout(() => {
+        this._infoPaneRefreshTimer = null;
+        this._refreshActiveInfoPane();
+      }, Math.max(0, Number(delay) || 0));
+    }
+    _refreshActiveInfoPane() {
+      try {
+        const infoBox = this._getActiveInfoBox?.();
+        if (!infoBox) return;
+        this._refreshCustomInfoRows(infoBox);
+      } catch (e) {
+      }
+    }
+    _refreshRegisteredInfoRows() {
+    }
+    _refreshCustomInfoRows(infoBox) {
+      if (!infoBox) return;
+      this._renderJurisdictionField(infoBox);
+      this._renderCourtField(infoBox);
+      this._renderSchemaFieldRows(infoBox);
+      this._renderCustomCourtField(infoBox);
+    }
     async _syncCaseReporterFromFieldsAndMLZ(itemID) {
+      const item = this._getZoteroItemByAnyID(itemID);
+      if (!item || item.deleted) return false;
+      const itemTypeName = this._getItemTypeName(item);
+      if (itemTypeName !== "case") return false;
+      const reporter = String(item.getField?.("reporter") || "").trim();
+      const rawCourt = String(item.getField?.("court") || "").trim();
+      const hasCourtKeyAlready = this._looksLikeCourtKey(rawCourt);
+      const parsedCourt = hasCourtKeyAlready ? null : this.caseCourtMapper?.mapCaseCourt?.(rawCourt) || null;
+      const mappedCourt = this.abbrevService.normalizeKey(parsedCourt?.courtKey || "");
+      const mappedJurisdiction = String(parsedCourt?.jurisdiction || "").trim().toLowerCase();
+      const court = this.abbrevService.normalizeKey(rawCourt || "");
+      const extra = String(item.getField?.("extra") || "");
+      const mlzFields = this.Jurisdiction.getMLZExtraFields?.(extra) || null;
+      const mlzReporter = String(mlzFields?.reporter || "").trim();
+      const mlzCourt = this.abbrevService.normalizeKey(mlzFields?.court || "");
+      const mlzJurisdiction = this.Jurisdiction.getMLZJurisdiction?.(extra) || "";
+      const derivedJurisdiction = this.Jurisdiction.fromItem(item);
+      const inferredJurisdiction = mappedJurisdiction || derivedJurisdiction;
+      const upgradedCourt = this._upgradeGenericCourtKey(court, inferredJurisdiction);
+      try {
+        Zotero.debug(`[IndigoBook CSL-M] case court mapping: raw="${rawCourt}" mappedCourt="${mappedCourt}" mappedJurisdiction="${mappedJurisdiction}" derivedJurisdiction="${derivedJurisdiction}" inferredJurisdiction="${inferredJurisdiction}" upgradedCourt="${upgradedCourt}"`);
+      } catch (e) {
+      }
+      let nextExtra = extra;
+      let changed = false;
+      const targetCourt = mappedCourt || upgradedCourt;
+      if (targetCourt && (!hasCourtKeyAlready || court !== targetCourt)) {
+        item.setField("court", targetCourt);
+        changed = true;
+      }
+      const effectiveCourt = targetCourt || court;
+      const effectiveJurisdiction = inferredJurisdiction;
+      const canRewriteJurisdiction = !mlzJurisdiction || /^us(?::|$)/.test(mlzJurisdiction);
+      if (reporter && reporter !== mlzReporter) {
+        nextExtra = this.Jurisdiction.updateMLZExtraField?.(nextExtra, "reporter", reporter) || nextExtra;
+      }
+      if (!reporter && mlzReporter) {
+        item.setField("reporter", mlzReporter);
+        changed = true;
+      }
+      if (canRewriteJurisdiction && effectiveJurisdiction && effectiveJurisdiction !== mlzJurisdiction) {
+        const displayJurisdiction = this.abbrevService.formatJurisdictionDisplay(effectiveJurisdiction);
+        nextExtra = this.Jurisdiction.updateMLZJurisdiction?.(nextExtra, effectiveJurisdiction, displayJurisdiction) || nextExtra;
+      }
+      if (effectiveCourt && effectiveCourt !== mlzCourt) {
+        nextExtra = this.Jurisdiction.updateMLZExtraField?.(nextExtra, "court", effectiveCourt) || nextExtra;
+      }
+      if (!effectiveCourt && mlzCourt) {
+        item.setField("court", mlzCourt);
+        changed = true;
+      }
+      if (nextExtra !== extra) {
+        item.setField("extra", nextExtra);
+        changed = true;
+      }
+      if (!changed) return false;
+      await item.saveTx({ skipDateModifiedUpdate: true });
+      try {
+        Zotero.debug(`[IndigoBook CSL-M] case sync: wrote reporter/jurisdiction/court mlz state (item ${String(itemID)})`);
+      } catch (e) {
+      }
+      return true;
+    }
+    async _syncItemFromFieldsAndMLZ(itemID) {
       const normalizedID = String(itemID);
-      if (this._syncInFlight.has(normalizedID)) return;
+      if (this._syncInFlight.has(normalizedID)) return false;
       this._syncInFlight.add(normalizedID);
       try {
-        const item = this._getZoteroItemByAnyID(itemID);
-        if (!item || item.deleted) return;
-        const itemTypeName = Zotero?.ItemTypes?.getName?.(item.itemTypeID);
-        if (itemTypeName !== "case") return;
-        const reporter = String(item.getField?.("reporter") || "").trim();
-        const rawCourt = String(item.getField?.("court") || "").trim();
-        const hasCourtKeyAlready = this._looksLikeCourtKey(rawCourt);
-        const parsedCourt = hasCourtKeyAlready ? null : this.caseCourtMapper?.mapCaseCourt?.(rawCourt) || null;
-        const mappedCourt = this.abbrevService.normalizeKey(parsedCourt?.courtKey || "");
-        const mappedJurisdiction = String(parsedCourt?.jurisdiction || "").trim().toLowerCase();
-        const court = this.abbrevService.normalizeKey(rawCourt || "");
-        const extra = String(item.getField?.("extra") || "");
-        const mlzFields = this.Jurisdiction.getMLZExtraFields?.(extra) || null;
-        const mlzReporter = String(mlzFields?.reporter || "").trim();
-        const mlzCourt = this.abbrevService.normalizeKey(mlzFields?.court || "");
-        const mlzJurisdiction = this.Jurisdiction.getMLZJurisdiction?.(extra) || "";
-        const derivedJurisdiction = this.Jurisdiction.fromItem(item);
-        const inferredJurisdiction = mappedJurisdiction || derivedJurisdiction;
-        const upgradedCourt = this._upgradeGenericCourtKey(court, inferredJurisdiction);
-        try {
-          Zotero.debug(`[IndigoBook CSL-M] case court mapping: raw="${rawCourt}" mappedCourt="${mappedCourt}" mappedJurisdiction="${mappedJurisdiction}" derivedJurisdiction="${derivedJurisdiction}" inferredJurisdiction="${inferredJurisdiction}" upgradedCourt="${upgradedCourt}"`);
-        } catch (e) {
-        }
-        let nextExtra = extra;
-        let changed = false;
-        const targetCourt = mappedCourt || upgradedCourt;
-        if (targetCourt && (!hasCourtKeyAlready || court !== targetCourt)) {
-          item.setField("court", targetCourt);
-          changed = true;
-        }
-        const effectiveCourt = targetCourt || court;
-        const effectiveJurisdiction = inferredJurisdiction;
-        const canRewriteJurisdiction = !mlzJurisdiction || /^us(?::|$)/.test(mlzJurisdiction);
-        if (reporter && reporter !== mlzReporter) {
-          nextExtra = this.Jurisdiction.updateMLZExtraField?.(nextExtra, "reporter", reporter) || nextExtra;
-        }
-        if (!reporter && mlzReporter) {
-          item.setField("reporter", mlzReporter);
-          changed = true;
-        }
-        if (canRewriteJurisdiction && effectiveJurisdiction && effectiveJurisdiction !== mlzJurisdiction) {
-          const displayJurisdiction = this.abbrevService.formatJurisdictionDisplay(effectiveJurisdiction);
-          nextExtra = this.Jurisdiction.updateMLZJurisdiction?.(nextExtra, effectiveJurisdiction, displayJurisdiction) || nextExtra;
-        }
-        if (effectiveCourt && effectiveCourt !== mlzCourt) {
-          nextExtra = this.Jurisdiction.updateMLZExtraField?.(nextExtra, "court", effectiveCourt) || nextExtra;
-        }
-        if (!effectiveCourt && mlzCourt) {
-          item.setField("court", mlzCourt);
-          changed = true;
-        }
-        if (nextExtra !== extra) {
-          item.setField("extra", nextExtra);
-          changed = true;
-        }
-        if (!changed) return;
-        await item.saveTx({ skipDateModifiedUpdate: true });
-        try {
-          Zotero.debug(`[IndigoBook CSL-M] case sync: wrote reporter/jurisdiction/court mlz state (item ${normalizedID})`);
-        } catch (e) {
-        }
+        const caseChanged = await this._syncCaseReporterFromFieldsAndMLZ(itemID);
+        const schemaChanged = await this._syncSchemaConfiguredFields(itemID);
+        return !!(caseChanged || schemaChanged);
       } catch (e) {
         try {
           Zotero.logError(e);
         } catch (_) {
         }
         try {
-          Zotero.debug(`[IndigoBook CSL-M] case reporter sync failed for item ${normalizedID}: ${String(e)}`);
+          Zotero.debug(`[IndigoBook CSL-M] item sync failed for item ${normalizedID}: ${String(e)}`);
         } catch (_) {
         }
+        return false;
       } finally {
         this._syncInFlight.delete(normalizedID);
       }
+    }
+    async _syncSchemaConfiguredFields(itemID) {
+      const item = this._getZoteroItemByAnyID(itemID);
+      if (!item || item.deleted) return false;
+      const itemTypeName = this._getItemTypeName(item);
+      const fieldDefinitions = this.schemaConfig?.getFieldDefinitionsForItemType?.(itemTypeName) || [];
+      if (!fieldDefinitions.length) return false;
+      const extra = String(item.getField?.("extra") || "");
+      const mlzFields = this.Jurisdiction.getMLZExtraFields?.(extra) || null;
+      let nextExtra = extra;
+      let changed = false;
+      for (const definition of fieldDefinitions) {
+        if (!definition?.field) continue;
+        if (itemTypeName === "case" && ["reporter", "court", "jurisdiction"].includes(definition.field)) continue;
+        const nativeFieldName = this._resolveNativeFieldName(item.itemTypeID, definition.field, definition.baseField);
+        const nativeValue = nativeFieldName ? String(item.getField?.(nativeFieldName) || "").trim() : "";
+        if (definition.field === "jurisdiction") {
+          const normalizedNative = nativeValue ? this._normalizeJurisdictionValue(nativeValue) : "";
+          const mlzJurisdiction = this.Jurisdiction.getMLZJurisdiction?.(extra) || "";
+          if (nativeFieldName && normalizedNative && normalizedNative !== mlzJurisdiction) {
+            const displayJurisdiction = this.abbrevService.formatJurisdictionDisplay(normalizedNative);
+            nextExtra = this.Jurisdiction.updateMLZJurisdiction?.(nextExtra, normalizedNative, displayJurisdiction) || nextExtra;
+          }
+          if (nativeFieldName && !normalizedNative && mlzJurisdiction) {
+            item.setField(nativeFieldName, mlzJurisdiction);
+            changed = true;
+          }
+          continue;
+        }
+        const mlzValue = String(mlzFields?.[definition.field] || "").trim();
+        if (nativeFieldName && nativeValue && nativeValue !== mlzValue) {
+          nextExtra = this.Jurisdiction.updateMLZExtraField?.(nextExtra, definition.field, nativeValue) || nextExtra;
+        }
+        if (nativeFieldName && !nativeValue && mlzValue) {
+          item.setField(nativeFieldName, mlzValue);
+          changed = true;
+        }
+      }
+      if (nextExtra !== extra) {
+        item.setField("extra", nextExtra);
+        changed = true;
+      }
+      if (!changed) return false;
+      await item.saveTx({ skipDateModifiedUpdate: true });
+      return true;
     }
     _looksLikeCourtKey(value) {
       const normalized = this.abbrevService.normalizeKey(value || "");
@@ -2610,7 +2711,7 @@ ${mlzBlock}` : mlzBlock;
         for (const entry of selected) {
           const id = typeof entry === "number" || typeof entry === "string" ? entry : entry?.id;
           if (id == null) continue;
-          await this._syncCaseReporterFromFieldsAndMLZ(id);
+          await this._syncItemFromFieldsAndMLZ(id);
         }
       } catch (e) {
         try {
@@ -2662,7 +2763,15 @@ ${mlzBlock}` : mlzBlock;
       this._updateJurisdictionRow(infoBox, row, item);
     }
     _renderExtraPersonCreatorRows(infoBox) {
+      const itemTypeID = infoBox?.item?.itemTypeID;
+      const allowed = this._getExtraPersonTypesForItemType(itemTypeID);
+      const allowedKeys = new Set(allowed.map((entry) => entry.key));
       for (const extraPersonType of this._extraPersonTypes) {
+        if (!allowedKeys.has(extraPersonType.key)) {
+          this._removeExtraPersonCreatorRows(infoBox, extraPersonType);
+        }
+      }
+      for (const extraPersonType of allowed) {
         this._renderExtraPersonCreatorRow(infoBox, extraPersonType);
       }
     }
@@ -2769,6 +2878,10 @@ ${mlzBlock}` : mlzBlock;
       if (!row) return;
       row.setAttribute("data-ibcslm-extra-person-type", extraPersonType.key);
       if (extraPersonType.key === "commenter") row.setAttribute("data-ibcslm-commenter-row", "true");
+      const labelNode = row.querySelector?.(".meta-label label");
+      if (labelNode) {
+        labelNode.textContent = this._getExtraPersonLabel(extraPersonType);
+      }
       const plusButton = row.querySelector(".zotero-clicky-plus");
       const optionsButton = row.querySelector(".zotero-clicky-options");
       const grippy = row.querySelector(".zotero-clicky-grippy");
@@ -2800,13 +2913,13 @@ ${mlzBlock}` : mlzBlock;
       const menu = infoBox._creatorTypeMenu;
       if (!menu) return;
       const doc = menu.ownerDocument || infoBox.ownerDocument;
-      for (const extraPersonType of this._extraPersonTypes) {
+      for (const extraPersonType of this._getExtraPersonTypesForItemType(item.itemTypeID)) {
         const existing = Array.from(menu.children || []).some((node) => {
           return String(node?.getAttribute?.("typeid") || "") === extraPersonType.creatorTypeID;
         });
         if (existing) continue;
         const menuitem = doc.createXULElement("menuitem");
-        menuitem.setAttribute("label", extraPersonType.label);
+        menuitem.setAttribute("label", this._getExtraPersonLabel(extraPersonType));
         menuitem.setAttribute("typeid", extraPersonType.creatorTypeID);
         menu.appendChild(menuitem);
       }
@@ -2869,6 +2982,11 @@ ${mlzBlock}` : mlzBlock;
       const row = infoBox?.querySelector?.(`#${this._customCourtRowID}`);
       if (row?.parentNode) row.parentNode.removeChild(row);
     }
+    _removeSchemaFieldRows(infoBox) {
+      for (const row of infoBox?.querySelectorAll?.('[data-ibcslm-schema-field-row="true"]') || []) {
+        row.parentNode?.removeChild(row);
+      }
+    }
     _getInfoTable(infoBox) {
       return infoBox?._infoTable || infoBox?.querySelector?.("#info-table") || null;
     }
@@ -2895,12 +3013,12 @@ ${mlzBlock}` : mlzBlock;
       if (typeof infoBox.createLabelElement === "function") {
         label = infoBox.createLabelElement({
           id: "itembox-field-jurisdiction-label",
-          text: "Jurisdiction"
+          text: this._getLocalizedBuiltinLabel("jurisdiction")
         });
       } else {
         label = doc.createElement("label");
         label.id = "itembox-field-jurisdiction-label";
-        label.textContent = "Jurisdiction";
+        label.textContent = this._getLocalizedBuiltinLabel("jurisdiction");
       }
       labelWrapper.appendChild(label);
       const dataWrapper = doc.createElement("div");
@@ -2923,12 +3041,12 @@ ${mlzBlock}` : mlzBlock;
       if (typeof infoBox.createLabelElement === "function") {
         label = infoBox.createLabelElement({
           id: "itembox-field-custom-court-label",
-          text: "Custom Court"
+          text: this._getLocalizedBuiltinLabel("customCourt")
         });
       } else {
         label = doc.createElement("label");
         label.id = "itembox-field-custom-court-label";
-        label.textContent = "Custom Court";
+        label.textContent = this._getLocalizedBuiltinLabel("customCourt");
       }
       labelWrapper.appendChild(label);
       const dataWrapper = doc.createElement("div");
@@ -2949,7 +3067,7 @@ ${mlzBlock}` : mlzBlock;
       const customInput = doc.createElement("input");
       customInput.id = "itembox-field-court-custom";
       customInput.className = "value";
-      customInput.placeholder = "Enter custom court key";
+      customInput.placeholder = this._getLocalizedBuiltinLabel("customCourtPlaceholder");
       customInput.style.maxWidth = "220px";
       const currentCourt = String(item?.getField?.("court") || "").trim();
       customInput.value = currentCourt;
@@ -2960,7 +3078,7 @@ ${mlzBlock}` : mlzBlock;
       };
       const setButton = doc.createElement("button");
       setButton.type = "button";
-      setButton.textContent = "Set";
+      setButton.textContent = this._getLocalizedBuiltinLabel("setButton");
       setButton.addEventListener("click", () => {
         saveCustomCourtValue();
       });
@@ -3084,6 +3202,22 @@ ${mlzBlock}` : mlzBlock;
         formatOptionText: (option) => option.label
       });
     }
+    _buildSchemaJurisdictionMenuList(infoBox, item, definition, currentJurisdiction, displayValue) {
+      const doc = infoBox.ownerDocument;
+      return this._buildFilteredPickerControl(doc, {
+        fieldName: definition.field,
+        inputId: `itembox-field-${definition.field}-input`,
+        listId: `itembox-field-${definition.field}-list`,
+        currentValue: currentJurisdiction,
+        displayValue,
+        options: this._getJurisdictionOptions(currentJurisdiction),
+        minChars: 2,
+        onSelect: async (option) => {
+          await this._saveSchemaFieldValue(item, definition, option.code);
+        },
+        formatOptionText: (option) => option.label
+      });
+    }
     _buildCourtMenuList(infoBox, item, currentJurisdiction, currentCourtKey, displayValue) {
       const doc = infoBox.ownerDocument;
       const menulist = doc.createXULElement("menulist");
@@ -3132,14 +3266,7 @@ ${mlzBlock}` : mlzBlock;
           item.setField("extra", nextExtra);
           item.setField("court", "");
           await item.saveTx({ skipDateModifiedUpdate: true });
-          try {
-            const infoBox2 = this._getActiveInfoBox?.();
-            if (infoBox2) {
-              this._renderCourtField(infoBox2);
-              this._renderCustomCourtField(infoBox2);
-            }
-          } catch (e) {
-          }
+          this._scheduleActiveInfoPaneRefresh(75);
           return;
         }
         await this._saveCourtFromMenu(item, selectedValue);
@@ -3487,11 +3614,48 @@ ${mlzBlock}` : mlzBlock;
       return this._extraPersonTypes.find((config) => {
         if (normalized === String(config.creatorTypeID).toLowerCase()) return true;
         if (normalized === String(config.creatorTypeName).toLowerCase()) return true;
-        return config.key === "commenter" && normalized === String(config.label).toLowerCase();
+        if (normalized === String(config.key).toLowerCase()) return true;
+        if (normalized === String(config.label).toLowerCase()) return true;
+        return normalized === String(this._getExtraPersonLabel(config)).toLowerCase();
       }) || null;
     }
+    _getExtraPersonLabel(extraPersonType) {
+      if (!extraPersonType?.key) return "";
+      return this.schemaConfig?.getLocalizedCreatorLabel?.(extraPersonType.key, Zotero?.locale || "en-US") || extraPersonType.label || String(extraPersonType.key || "");
+    }
     _itemTypeSupportsExtraPerson(itemTypeID) {
-      return Zotero?.ItemTypes?.getName?.(itemTypeID) === "case";
+      return this._getExtraPersonTypesForItemType(itemTypeID).length > 0;
+    }
+    _getExtraPersonTypesForItemType(itemTypeID) {
+      const itemTypeName = this._getItemTypeNameByID(itemTypeID);
+      if (!itemTypeName) return [];
+      const creatorKeys = new Set(this.schemaConfig?.getCreatorKeysForItemType?.(itemTypeName) || []);
+      if (!creatorKeys.size) return [];
+      return this._extraPersonTypes.filter((config) => {
+        return creatorKeys.has(config.key) && !this._itemTypeHasNativeCreator(itemTypeID, config.key);
+      });
+    }
+    _itemTypeHasNativeCreator(itemTypeID, creatorKey) {
+      const normalize = (value) => String(value || "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+      const target = normalize(creatorKey);
+      if (!target) return false;
+      const creatorTypes = this._orig.creatorTypesGetTypesForItemType?.call(Zotero.CreatorTypes, itemTypeID) || Zotero?.CreatorTypes?.getTypesForItemType?.(itemTypeID) || [];
+      for (const entry of creatorTypes) {
+        if (normalize(entry?.name) === target) return true;
+        const resolvedName = this._orig.creatorTypesGetName?.call(Zotero.CreatorTypes, entry?.id);
+        if (normalize(resolvedName) === target) return true;
+      }
+      return false;
+    }
+    _getItemTypeName(item) {
+      return this._getItemTypeNameByID(item?.itemTypeID);
+    }
+    _getItemTypeNameByID(itemTypeID) {
+      try {
+        return Zotero?.ItemTypes?.getName?.(itemTypeID) || "";
+      } catch (e) {
+      }
+      return "";
     }
     async _saveJurisdictionFromMenu(item, selectedCode) {
       try {
@@ -3505,15 +3669,7 @@ ${mlzBlock}` : mlzBlock;
         item.setField("extra", nextExtra);
         item.setField("court", "");
         await item.saveTx({ skipDateModifiedUpdate: true });
-        try {
-          const infoBox = this._getActiveInfoBox?.();
-          if (infoBox) {
-            const courtRow = this._findInfoFieldRow(infoBox, "court");
-            if (courtRow) this._renderCourtField(infoBox);
-            this._renderCustomCourtField(infoBox);
-          }
-        } catch (e) {
-        }
+        this._scheduleActiveInfoPaneRefresh(75);
         try {
           Zotero.debug(`[IndigoBook CSL-M] jurisdiction row saved: item=${String(item.id)} jurisdiction=${selectedCode}`);
         } catch (e) {
@@ -3550,6 +3706,7 @@ ${mlzBlock}` : mlzBlock;
           if (!targetOptions.length) {
             item.setField("court", "");
             await item.saveTx({ skipDateModifiedUpdate: true });
+            this._scheduleActiveInfoPaneRefresh(75);
             try {
               Zotero.debug(`[IndigoBook CSL-M] court row cleared for jurisdiction with no institution-part: item=${String(item.id)} jurisdiction=${targetJurisdiction}`);
             } catch (e) {
@@ -3559,6 +3716,7 @@ ${mlzBlock}` : mlzBlock;
         }
         item.setField("court", normalizedKey);
         await item.saveTx({ skipDateModifiedUpdate: true });
+        this._scheduleActiveInfoPaneRefresh(75);
         try {
           Zotero.debug(`[IndigoBook CSL-M] court row saved: item=${String(item.id)} court=${normalizedKey} jurisdiction=${targetJurisdiction || "unchanged"}`);
         } catch (e) {
@@ -3572,6 +3730,546 @@ ${mlzBlock}` : mlzBlock;
           Zotero.debug(`[IndigoBook CSL-M] court row save failed: ${String(e)}`);
         } catch (_) {
         }
+      }
+    }
+    _resolveNativeFieldName(itemTypeID, fieldName, baseField = null) {
+      const direct = this._getNativeFieldNameForType(itemTypeID, fieldName);
+      if (direct) return direct;
+      if (!baseField) return null;
+      return this._getFieldNameFromBaseForType(itemTypeID, baseField) || this._getNativeFieldNameForType(itemTypeID, baseField);
+    }
+    _getNativeFieldNameForType(itemTypeID, fieldName) {
+      const name = String(fieldName || "").trim();
+      if (!name) return null;
+      try {
+        const fieldID = Zotero?.ItemFields?.getID?.(name);
+        if (!fieldID) return null;
+        if (Zotero?.ItemFields?.isValidForType?.(fieldID, itemTypeID)) {
+          return name;
+        }
+      } catch (e) {
+      }
+      return null;
+    }
+    _renderSchemaFieldRows(infoBox) {
+      const item = infoBox?.item;
+      if (!item || item.deleted) {
+        this._cleanupRegisteredSchemaInfoRows(infoBox);
+        return;
+      }
+      this._removeSchemaFieldRows(infoBox);
+      this._resetSchemaHiddenBaseRows(infoBox);
+      const table = this._getInfoTable(infoBox);
+      if (!table) return;
+      const itemTypeName = this._getItemTypeName(item);
+      const definitions = this.schemaConfig?.getFieldDefinitionsForItemType?.(itemTypeName) || [];
+      for (const definition of definitions) {
+        if (!this._shouldUseSchemaInfoRow(item, definition)) continue;
+        const row = this._buildSchemaFieldRow(infoBox, item, definition, !!infoBox.editable);
+        if (!row) continue;
+        table.appendChild(row);
+        this._hideSchemaBaseFieldRow(infoBox, item, definition);
+      }
+      this._applySchemaSequence(infoBox);
+    }
+    _cleanupRegisteredSchemaInfoRows(infoBox) {
+      this._removeSchemaFieldRows(infoBox);
+      this._resetSchemaHiddenBaseRows(infoBox);
+    }
+    _resetRegisteredSchemaInfoRows(infoBox) {
+      this._removeSchemaFieldRows(infoBox);
+    }
+    _findSchemaInfoRow(infoBox, fieldName) {
+      return infoBox?.querySelector?.(
+        `[data-ibcslm-schema-field-row="true"][data-ibcslm-schema-field="${String(fieldName || "").trim()}"]`
+      ) || null;
+    }
+    _buildSchemaFieldRow(infoBox, item, definition, editable) {
+      const fieldName = String(definition?.field || "").trim();
+      if (!fieldName) return null;
+      const doc = infoBox?.ownerDocument;
+      if (!doc) return null;
+      const row = doc.createElement("div");
+      row.id = this._getSchemaInfoRowID(fieldName);
+      row.className = "meta-row";
+      row.setAttribute("data-ibcslm-schema-field-row", "true");
+      row.setAttribute("data-ibcslm-schema-field", fieldName);
+      const labelWrapper = doc.createElement("div");
+      labelWrapper.className = "meta-label";
+      labelWrapper.setAttribute("fieldname", fieldName);
+      let label;
+      if (typeof infoBox.createLabelElement === "function") {
+        label = infoBox.createLabelElement({
+          id: `itembox-field-${fieldName}-label`,
+          text: this._getSchemaFieldLabel(fieldName)
+        });
+      } else {
+        label = doc.createElement("label");
+        label.id = `itembox-field-${fieldName}-label`;
+        label.textContent = this._getSchemaFieldLabel(fieldName);
+      }
+      labelWrapper.appendChild(label);
+      const valueWrapper = doc.createElement("div");
+      valueWrapper.className = "meta-data";
+      const storedValue = this._getSchemaFieldValue(item, fieldName, this.Jurisdiction.getMLZExtraFields?.(item) || null);
+      if (this._isSchemaFlagField(fieldName)) {
+        valueWrapper.appendChild(this._buildSchemaCheckboxValueControl(
+          doc,
+          item,
+          definition,
+          storedValue,
+          editable
+        ));
+      } else {
+        const displayValue = definition?.kind === "date" ? this._formatSchemaDateDisplay(storedValue) : String(storedValue || "");
+        if (editable) {
+          valueWrapper.appendChild(this._buildSchemaValueControl(infoBox, item, definition, storedValue, displayValue));
+        } else if (typeof infoBox.createValueElement === "function") {
+          const valueElem = infoBox.createValueElement({
+            editable: false,
+            text: displayValue,
+            id: `itembox-field-${fieldName}-value`,
+            attributes: {
+              "aria-labelledby": `itembox-field-${fieldName}-label`,
+              fieldname: fieldName,
+              title: String(storedValue || "")
+            }
+          });
+          valueElem.value = displayValue;
+          valueWrapper.appendChild(valueElem);
+        } else {
+          const input = doc.createElement("input");
+          input.className = "value";
+          input.readOnly = true;
+          input.value = displayValue;
+          input.title = String(storedValue || "");
+          valueWrapper.appendChild(input);
+        }
+      }
+      row.appendChild(labelWrapper);
+      row.appendChild(valueWrapper);
+      return row;
+    }
+    _hideSchemaBaseFieldRow(infoBox, item, definition) {
+      const fieldName = String(definition?.field || "").trim();
+      if (!fieldName || !definition?.baseField) return;
+      const nativeFieldName = this._resolveNativeFieldName(item.itemTypeID, fieldName, definition.baseField);
+      if (!nativeFieldName || nativeFieldName === fieldName) return;
+      const row = this._findInfoFieldRow(infoBox, nativeFieldName);
+      if (!row) return;
+      row.hidden = true;
+      row.setAttribute("data-ibcslm-schema-hidden-base-row", "true");
+    }
+    _resetSchemaHiddenBaseRows(infoBox) {
+      for (const row of infoBox?.querySelectorAll?.('[data-ibcslm-schema-hidden-base-row="true"]') || []) {
+        row.hidden = false;
+        row.removeAttribute("data-ibcslm-schema-hidden-base-row");
+      }
+    }
+    _applySchemaSequence(infoBox) {
+      const table = this._getInfoTable(infoBox);
+      if (!table) return;
+      const sequence = this.schemaConfig?.getSequenceForItemType?.(this._getItemTypeName(infoBox?.item)) || [];
+      let anchor = null;
+      for (let idx = sequence.length - 1; idx >= 0; idx -= 1) {
+        const row = this._findInfoFieldRow(infoBox, sequence[idx]);
+        if (!row || row.hidden || row.parentNode !== table) continue;
+        if (anchor && row.nextSibling !== anchor) {
+          table.insertBefore(row, anchor);
+        }
+        anchor = row;
+      }
+    }
+    _getFieldNameFromBaseForType(itemTypeID, baseField) {
+      const name = String(baseField || "").trim();
+      if (!name) return null;
+      try {
+        const baseFieldID = Zotero?.ItemFields?.getID?.(name);
+        if (!baseFieldID) return null;
+        const typeFieldID = Zotero?.ItemFields?.getFieldIDFromTypeAndBase?.(itemTypeID, baseFieldID);
+        if (!typeFieldID) return null;
+        return Zotero?.ItemFields?.getName?.(typeFieldID) || null;
+      } catch (e) {
+      }
+      return null;
+    }
+    _getLocalizedBuiltinLabel(key) {
+      if (key === "jurisdiction") {
+        return this._getSchemaFieldLabel("jurisdiction");
+      }
+      const locale = Zotero?.locale || "en-US";
+      const candidates = getLocaleCandidates(locale);
+      const translations = {
+        customCourt: {
+          de: "Benutzerdefiniertes Gericht",
+          "de-de": "Benutzerdefiniertes Gericht",
+          "de-at": "Benutzerdefiniertes Gericht",
+          "de-ch": "Benutzerdefiniertes Gericht",
+          en: "Custom Court",
+          us: "Custom Court"
+        },
+        customCourtPlaceholder: {
+          de: "Benutzerdefinierten Gerichtsschluessel eingeben",
+          "de-de": "Benutzerdefinierten Gerichtsschluessel eingeben",
+          "de-at": "Benutzerdefinierten Gerichtsschluessel eingeben",
+          "de-ch": "Benutzerdefinierten Gerichtsschluessel eingeben",
+          en: "Enter custom court key",
+          us: "Enter custom court key"
+        },
+        setButton: {
+          de: "Setzen",
+          "de-de": "Setzen",
+          "de-at": "Setzen",
+          "de-ch": "Setzen",
+          en: "Set",
+          us: "Set"
+        }
+      };
+      const table = translations[key] || {};
+      for (const candidate of candidates) {
+        if (table[candidate]) return table[candidate];
+      }
+      return table.en || String(key || "");
+    }
+    _normalizeJurisdictionValue(value) {
+      const raw = String(value || "").trim();
+      if (!raw) return "";
+      return this.Jurisdiction?._normalizeJurisdiction?.(raw) || raw.toLowerCase();
+    }
+    _getSchemaFieldValue(item, fieldName, mlzFields = null) {
+      if (!item) return "";
+      const itemTypeName = this._getItemTypeName(item);
+      const definition = this.schemaConfig?.getFieldDefinition?.(itemTypeName, fieldName) || null;
+      const nativeFieldName = this._resolveNativeFieldName(item.itemTypeID, fieldName, definition?.baseField);
+      if (fieldName === "jurisdiction") {
+        const nativeValue2 = nativeFieldName ? this._normalizeJurisdictionValue(item.getField?.(nativeFieldName)) : "";
+        if (nativeValue2) return nativeValue2;
+        return this.Jurisdiction.getMLZJurisdiction?.(item) || "";
+      }
+      const nativeValue = nativeFieldName ? String(item.getField?.(nativeFieldName) || "").trim() : "";
+      if (nativeValue) return nativeValue;
+      if (fieldName === "court") {
+        return this.abbrevService.normalizeKey(mlzFields?.court || "");
+      }
+      return String(mlzFields?.[fieldName] || "").trim();
+    }
+    _hasCSLValue(value) {
+      if (value == null) return false;
+      if (Array.isArray(value)) return value.length > 0;
+      if (typeof value === "string") return value.trim() !== "";
+      if (typeof value === "object") return Object.keys(value).length > 0;
+      return true;
+    }
+    _getFirstSchemaFieldValue(item, fieldNames, mlzFields = null) {
+      for (const fieldName of Array.isArray(fieldNames) ? fieldNames : []) {
+        const value = this._getSchemaFieldValue(item, fieldName, mlzFields);
+        if (this._hasCSLValue(value)) return value;
+      }
+      return "";
+    }
+    _assignCSLFieldValue(cslItem, cslField, value) {
+      if (!this._hasCSLValue(value)) return;
+      if (cslField === "authority") {
+        cslItem.authority = [{ literal: String(value).trim() }];
+        return;
+      }
+      cslItem[cslField] = value;
+    }
+    _parseRawDateToCSL(value) {
+      const raw = String(value || "").trim();
+      if (!raw) return null;
+      const isoMatch = raw.match(/^(\d{4})(?:[-/](\d{1,2})(?:[-/](\d{1,2}))?)?$/);
+      if (isoMatch) {
+        const year = Number(isoMatch[1]);
+        const month = isoMatch[2] ? Number(isoMatch[2]) : null;
+        const day = isoMatch[3] ? Number(isoMatch[3]) : null;
+        const parts = [year];
+        if (month) parts.push(month);
+        if (day) parts.push(day);
+        return { "date-parts": [parts], raw };
+      }
+      return { raw };
+    }
+    _getSchemaFieldLabel(fieldName) {
+      const raw = String(fieldName || "").trim();
+      if (!raw) return "";
+      return this.schemaConfig?.getLocalizedFieldLabel?.(raw, Zotero?.locale || "en-US") || raw;
+    }
+    _isSchemaFlagField(fieldName) {
+      return /Flag$/.test(String(fieldName || "").trim());
+    }
+    _coerceSchemaFlagValue(value) {
+      const normalized = String(value == null ? "" : value).trim().toLowerCase();
+      return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+    }
+    _serializeSchemaFlagValue(checked) {
+      return checked ? "true" : "";
+    }
+    _formatSchemaDateDisplay(value) {
+      const raw = String(value || "").trim();
+      if (!raw) return "";
+      const ymd = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+      if (ymd) {
+        const date = new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3]));
+        return new Intl.DateTimeFormat(this._getSchemaLocale()).format(date);
+      }
+      const ym = raw.match(/^(\d{4})-(\d{1,2})$/);
+      if (ym) {
+        const date = new Date(Number(ym[1]), Number(ym[2]) - 1, 1);
+        return new Intl.DateTimeFormat(this._getSchemaLocale(), {
+          year: "numeric",
+          month: "numeric"
+        }).format(date);
+      }
+      const y = raw.match(/^(\d{4})$/);
+      if (y) return y[1];
+      return raw;
+    }
+    _normalizeSchemaDateInput(value) {
+      const raw = String(value || "").trim();
+      if (!raw) return "";
+      const isoLike = raw.match(/^(\d{4})(?:[-/.\s](\d{1,2})(?:[-/.\s](\d{1,2}))?)?$/);
+      if (isoLike) {
+        return this._serializeSchemaDateParts(isoLike[1], isoLike[2] || "", isoLike[3] || "");
+      }
+      const localizedNumeric = this._parseSchemaNumericDate(raw);
+      if (localizedNumeric) return localizedNumeric;
+      const monthNameDate = this._parseSchemaMonthNameDate(raw);
+      if (monthNameDate) return monthNameDate;
+      return raw;
+    }
+    _getSchemaLocale() {
+      return Zotero?.locale || "en-US";
+    }
+    _getSchemaLocaleDateOrder() {
+      try {
+        const parts = new Intl.DateTimeFormat(this._getSchemaLocale()).formatToParts(new Date(2001, 10, 22)).filter((part) => ["day", "month", "year"].includes(part.type)).map((part) => part.type);
+        return parts.length ? parts : ["month", "day", "year"];
+      } catch (e) {
+      }
+      return ["month", "day", "year"];
+    }
+    _getSchemaDatePlaceholder() {
+      const order = this._getSchemaLocaleDateOrder();
+      const mapping = {
+        day: "DD",
+        month: "MM",
+        year: "YYYY"
+      };
+      return order.map((part) => mapping[part] || part.toUpperCase()).join("/");
+    }
+    _serializeSchemaDateParts(year, month = "", day = "") {
+      const yyyy = String(year || "").trim();
+      const mm = String(month || "").trim();
+      const dd = String(day || "").trim();
+      if (!/^\d{4}$/.test(yyyy)) return "";
+      if (!mm) return yyyy;
+      const monthNumber = Number(mm);
+      if (!(monthNumber >= 1 && monthNumber <= 12)) return "";
+      if (!dd) return `${yyyy}-${String(monthNumber).padStart(2, "0")}`;
+      const dayNumber = Number(dd);
+      if (!(dayNumber >= 1 && dayNumber <= 31)) return "";
+      return `${yyyy}-${String(monthNumber).padStart(2, "0")}-${String(dayNumber).padStart(2, "0")}`;
+    }
+    _parseSchemaNumericDate(raw) {
+      const parts = raw.split(/[\/.\-\s]+/).map((part) => String(part || "").trim()).filter(Boolean);
+      if (parts.length < 2 || parts.length > 3) return "";
+      const tryOrders = [];
+      const localeOrder = this._getSchemaLocaleDateOrder();
+      if (parts.length === 3) {
+        tryOrders.push(localeOrder);
+        tryOrders.push(["month", "day", "year"]);
+        tryOrders.push(["day", "month", "year"]);
+        tryOrders.push(["year", "month", "day"]);
+      } else if (parts.length === 2) {
+        tryOrders.push(["year", "month"]);
+        tryOrders.push(["month", "year"]);
+      }
+      for (const order of tryOrders) {
+        const parsed = this._tryParseSchemaDateWithOrder(parts, order);
+        if (parsed) return parsed;
+      }
+      return "";
+    }
+    _tryParseSchemaDateWithOrder(parts, order) {
+      const values = {};
+      for (let idx = 0; idx < Math.min(parts.length, order.length); idx += 1) {
+        values[order[idx]] = parts[idx];
+      }
+      const year = String(values.year || "").trim();
+      const month = String(values.month || "").trim();
+      const day = String(values.day || "").trim();
+      if (!year || !/^\d{4}$/.test(year)) return "";
+      if (!month || !/^\d{1,2}$/.test(month)) return "";
+      if (day && !/^\d{1,2}$/.test(day)) return "";
+      return this._serializeSchemaDateParts(year, month, day);
+    }
+    _parseSchemaMonthNameDate(raw) {
+      const monthMap = {
+        january: "01",
+        jan: "01",
+        february: "02",
+        feb: "02",
+        march: "03",
+        mar: "03",
+        april: "04",
+        apr: "04",
+        may: "05",
+        june: "06",
+        jun: "06",
+        july: "07",
+        jul: "07",
+        august: "08",
+        aug: "08",
+        september: "09",
+        sept: "09",
+        sep: "09",
+        october: "10",
+        oct: "10",
+        november: "11",
+        nov: "11",
+        december: "12",
+        dec: "12"
+      };
+      const normalized = raw.replace(/,/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
+      let match = normalized.match(/^([a-z]+)\s+(\d{1,2})\s+(\d{4})$/);
+      if (match) {
+        const month = monthMap[match[1]];
+        if (month) return this._serializeSchemaDateParts(match[3], month, match[2]);
+      }
+      match = normalized.match(/^(\d{1,2})\s+([a-z]+)\s+(\d{4})$/);
+      if (match) {
+        const month = monthMap[match[2]];
+        if (month) return this._serializeSchemaDateParts(match[3], month, match[1]);
+      }
+      match = normalized.match(/^([a-z]+)\s+(\d{4})$/);
+      if (match) {
+        const month = monthMap[match[1]];
+        if (month) return this._serializeSchemaDateParts(match[2], month, "");
+      }
+      return "";
+    }
+    _readSchemaControlValue(node) {
+      if (!node) return "";
+      if (typeof node.value !== "undefined") return String(node.value || "").trim();
+      return String(node.textContent || "").trim();
+    }
+    _buildSchemaValueControl(infoBox, item, definition, value, displayValue) {
+      const fieldName = String(definition?.field || "").trim();
+      if (typeof infoBox?.createValueElement === "function") {
+        const valueElem = infoBox.createValueElement({
+          editable: true,
+          text: displayValue,
+          id: `itembox-field-${fieldName}-input`,
+          attributes: {
+            "aria-labelledby": `itembox-field-${fieldName}-label`,
+            fieldname: fieldName,
+            title: displayValue
+          }
+        });
+        valueElem.value = displayValue;
+        if (definition?.kind === "date") {
+          valueElem.setAttribute?.("placeholder", this._getSchemaDatePlaceholder());
+        }
+        const saveValue2 = async () => {
+          let nextValue = this._readSchemaControlValue(valueElem);
+          if (definition?.kind === "date") {
+            nextValue = this._normalizeSchemaDateInput(nextValue);
+          }
+          await this._saveSchemaFieldValue(item, definition, nextValue);
+        };
+        valueElem.addEventListener?.("change", saveValue2);
+        valueElem.addEventListener?.("blur", saveValue2);
+        valueElem.addEventListener?.("keydown", (event) => {
+          if (event.key !== "Enter") return;
+          event.preventDefault();
+          saveValue2();
+        });
+        return valueElem;
+      }
+      const doc = infoBox?.ownerDocument;
+      const input = doc.createElement("input");
+      input.className = "value";
+      input.id = `itembox-field-${fieldName}-input`;
+      input.setAttribute("fieldname", fieldName);
+      input.setAttribute("aria-labelledby", `itembox-field-${fieldName}-label`);
+      input.value = displayValue;
+      if (definition?.kind === "date") {
+        input.placeholder = this._getSchemaDatePlaceholder();
+      }
+      input.style.maxWidth = "22em";
+      const saveValue = async () => {
+        let nextValue = String(input.value || "").trim();
+        if (definition?.kind === "date") {
+          nextValue = this._normalizeSchemaDateInput(nextValue);
+        }
+        await this._saveSchemaFieldValue(item, definition, nextValue);
+      };
+      input.addEventListener("change", saveValue);
+      input.addEventListener("blur", saveValue);
+      input.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        saveValue();
+      });
+      return input;
+    }
+    _buildSchemaCheckboxValueControl(doc, item, definition, value, editable) {
+      const fieldName = String(definition?.field || "").trim();
+      if (typeof doc.createXULElement === "function") {
+        const checkbox = doc.createXULElement("checkbox");
+        checkbox.id = `itembox-field-${fieldName}-input`;
+        checkbox.checked = this._coerceSchemaFlagValue(value);
+        checkbox.disabled = !editable;
+        checkbox.addEventListener("command", async () => {
+          if (checkbox.disabled) return;
+          await this._saveSchemaFieldValue(item, definition, this._serializeSchemaFlagValue(!!checkbox.checked));
+        });
+        return checkbox;
+      }
+      const input = doc.createElement("input");
+      input.type = "checkbox";
+      input.id = `itembox-field-${fieldName}-input`;
+      input.checked = this._coerceSchemaFlagValue(value);
+      input.disabled = !editable;
+      input.addEventListener("change", async () => {
+        if (input.disabled) return;
+        await this._saveSchemaFieldValue(item, definition, this._serializeSchemaFlagValue(input.checked));
+      });
+      return input;
+    }
+    async _saveSchemaFieldValue(item, definition, rawValue) {
+      if (!item?.setField || !definition?.field) return;
+      const fieldName = String(definition.field || "").trim();
+      const nativeFieldName = this._resolveNativeFieldName(item.itemTypeID, fieldName, definition.baseField);
+      const value = String(rawValue == null ? "" : rawValue).trim();
+      const extra = String(item.getField?.("extra") || "");
+      let nextExtra = extra;
+      let changed = false;
+      if (fieldName === "jurisdiction") {
+        const normalized = this._normalizeJurisdictionValue(value);
+        const displayValue = this.abbrevService.formatJurisdictionDisplay(normalized);
+        nextExtra = this.Jurisdiction.updateMLZJurisdiction?.(extra, normalized, displayValue) || extra;
+        if (nativeFieldName) {
+          item.setField(nativeFieldName, normalized);
+          changed = true;
+        }
+      } else {
+        if (nativeFieldName) {
+          item.setField(nativeFieldName, value);
+          changed = true;
+        }
+        nextExtra = this.Jurisdiction.updateMLZExtraField?.(nextExtra, fieldName, value) || nextExtra;
+      }
+      if (nextExtra !== extra) {
+        item.setField("extra", nextExtra);
+        changed = true;
+      }
+      if (!changed) return;
+      await item.saveTx({ skipDateModifiedUpdate: true });
+      try {
+        this._scheduleActiveInfoPaneRefresh(75);
+      } catch (e) {
       }
     }
     _patchRetrieveItem() {
@@ -3643,8 +4341,6 @@ ${mlzBlock}` : mlzBlock;
     _hydrateCSLItemFromZotero(cslItem, zotItem) {
       try {
         const mlzFields = this.Jurisdiction.getMLZExtraFields?.(zotItem) || null;
-        const commenterCreators = this.Jurisdiction.getMLZExtraCreatorsByType?.(zotItem, "commenter") || [];
-        const translatorCreators = this.Jurisdiction.getMLZExtraCreatorsByType?.(zotItem, "translator") || [];
         if (!cslItem.title) {
           const title = zotItem.getField?.("title");
           if (title) cslItem.title = title;
@@ -3677,18 +4373,42 @@ ${mlzBlock}` : mlzBlock;
             cslItem.authority = [{ literal: this.abbrevService.normalizeKey(court) || court }];
           }
         }
-        if (!cslItem.commenter && commenterCreators.length) {
-          cslItem.commenter = commenterCreators.map((creator) => this._extraPersonToCSLCreator(creator)).filter((creator) => creator.literal || creator.given || creator.family);
-        }
-        if (!cslItem.translator && translatorCreators.length) {
-          cslItem.translator = translatorCreators.map((creator) => this._extraPersonToCSLCreator(creator)).filter((creator) => creator.literal || creator.given || creator.family);
-        }
+        this._applySchemaCreatorMappings(cslItem, zotItem);
+        this._applySchemaCSLFieldMappings(cslItem, zotItem, mlzFields);
+        this._applySchemaCSLDateMappings(cslItem, zotItem, mlzFields);
         const seeAlso = this._collectSeeAlsoURIs(cslItem, zotItem);
         if (seeAlso.length) {
           cslItem.seeAlso = seeAlso;
         }
       } catch (e) {
         this._warnRetrieveItem(`hydrateCSLItemFromZotero failed: ${String(e)}`);
+      }
+    }
+    _applySchemaCreatorMappings(cslItem, zotItem) {
+      for (const extraPersonType of this._extraPersonTypes) {
+        const cslField = extraPersonType.cslField;
+        if (!cslField || this._hasCSLValue(cslItem[cslField])) continue;
+        const creators = this.Jurisdiction.getMLZExtraCreatorsByType?.(zotItem, extraPersonType.mlzType) || [];
+        if (!creators.length) continue;
+        const mapped = creators.map((creator) => this._extraPersonToCSLCreator(creator)).filter((creator) => creator.literal || creator.given || creator.family);
+        if (mapped.length) cslItem[cslField] = mapped;
+      }
+    }
+    _applySchemaCSLFieldMappings(cslItem, zotItem, mlzFields) {
+      const mappings = this.schemaConfig?.getCSLFieldMappings?.() || [];
+      for (const mapping of mappings) {
+        if (!mapping?.cslField || this._hasCSLValue(cslItem[mapping.cslField])) continue;
+        const value = this._getFirstSchemaFieldValue(zotItem, mapping.fields, mlzFields);
+        this._assignCSLFieldValue(cslItem, mapping.cslField, value);
+      }
+    }
+    _applySchemaCSLDateMappings(cslItem, zotItem, mlzFields) {
+      const mappings = this.schemaConfig?.getCSLDateMappings?.() || [];
+      for (const mapping of mappings) {
+        if (!mapping?.cslField || this._hasCSLValue(cslItem[mapping.cslField])) continue;
+        const rawValue = this._getFirstSchemaFieldValue(zotItem, mapping.fields, mlzFields);
+        const parsed = this._parseRawDateToCSL(rawValue);
+        if (parsed) cslItem[mapping.cslField] = parsed;
       }
     }
     _collectSeeAlsoURIs(cslItem, zotItem) {
@@ -4595,13 +5315,299 @@ ${mlzBlock}` : mlzBlock;
     }
   };
 
+  // lib/services/schemaConfig.mjs
+  function humanizeKey(value) {
+    const source = String(value || "").trim();
+    if (!source) return "";
+    return source.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim().replace(/\b\w/g, (match) => match.toUpperCase());
+  }
+  function toKebabCase(value) {
+    return String(value || "").trim().replace(/([a-z0-9])([A-Z])/g, "$1-$2").replace(/[_\s]+/g, "-").replace(/-+/g, "-").toLowerCase();
+  }
+  var SchemaConfig = class {
+    constructor({ dataStore }) {
+      this.dataStore = dataStore;
+      this.raw = null;
+      this.localizationRaw = null;
+      this._types = {};
+      this._creatorsByItemType = /* @__PURE__ */ new Map();
+      this._fieldDefsByItemType = /* @__PURE__ */ new Map();
+      this._fieldDefIndexByItemType = /* @__PURE__ */ new Map();
+      this._allFieldNames = /* @__PURE__ */ new Set();
+      this._cslFieldSources = /* @__PURE__ */ new Map();
+      this._cslDateSources = /* @__PURE__ */ new Map();
+      this._extraCreatorTypes = [];
+      this._sequenceByItemType = /* @__PURE__ */ new Map();
+      this._localizedFieldsByLocale = /* @__PURE__ */ new Map();
+      this._localizedCreatorsByLocale = /* @__PURE__ */ new Map();
+    }
+    async preload() {
+      this.raw = await this.dataStore.loadJSON("content/schema.json");
+      this.localizationRaw = await this.dataStore.loadJSON("content/localization.json").catch(() => null);
+      this._types = this.raw?.TYPES || {};
+      this._compileCreators();
+      this._compileFieldDefinitions();
+      this._compileCSLMappings();
+      this._compileExtraCreatorTypes();
+      this._compileSequence();
+      this._compileLocalization();
+    }
+    getExtraCreatorTypes() {
+      return this._extraCreatorTypes.map((entry) => ({ ...entry }));
+    }
+    getCreatorKeysForItemType(itemTypeName) {
+      const key = String(itemTypeName || "").trim();
+      return Array.from(this._creatorsByItemType.get(key) || []);
+    }
+    getFieldDefinitionsForItemType(itemTypeName) {
+      const key = String(itemTypeName || "").trim();
+      return (this._fieldDefsByItemType.get(key) || []).map((entry) => ({ ...entry }));
+    }
+    getFieldDefinition(itemTypeName, fieldName) {
+      const key = String(itemTypeName || "").trim();
+      const fieldKey = String(fieldName || "").trim();
+      return this._fieldDefIndexByItemType.get(key)?.get(fieldKey) || null;
+    }
+    getAllFieldNames() {
+      return Array.from(this._allFieldNames.values()).sort((a, b) => a.localeCompare(b));
+    }
+    getLocalizedFieldLabel(fieldName, rawLocale = null) {
+      const key = String(fieldName || "").trim();
+      if (!key) return "";
+      const localized = this._lookupLocalizedEntry(this._localizedFieldsByLocale, key, rawLocale);
+      if (localized) return localized;
+      if (/Flag$/.test(key)) {
+        return humanizeKey(key.replace(/Flag$/, ""));
+      }
+      return humanizeKey(key);
+    }
+    getLocalizedCreatorLabel(creatorType, rawLocale = null) {
+      const key = String(creatorType || "").trim();
+      if (!key) return "";
+      return this._lookupLocalizedEntry(this._localizedCreatorsByLocale, key, rawLocale) || humanizeKey(key);
+    }
+    getCSLFieldMappings() {
+      return Array.from(this._cslFieldSources.entries()).map(([cslField, fields]) => ({
+        cslField,
+        fields: [...fields]
+      }));
+    }
+    getCSLDateMappings() {
+      return Array.from(this._cslDateSources.entries()).map(([cslField, fields]) => ({
+        cslField,
+        fields: [...fields]
+      }));
+    }
+    getSequenceForItemType(itemTypeName) {
+      const key = String(itemTypeName || "").trim();
+      return [...this._sequenceByItemType.get(key) || []];
+    }
+    _compileCreators() {
+      const creators = this.raw?.CREATORS || {};
+      for (const [schemaItemType, creatorList] of Object.entries(creators)) {
+        const itemTypeName = this._resolveZoteroItemType(schemaItemType);
+        if (!itemTypeName) continue;
+        if (!this._creatorsByItemType.has(itemTypeName)) {
+          this._creatorsByItemType.set(itemTypeName, /* @__PURE__ */ new Set());
+        }
+        const bucket = this._creatorsByItemType.get(itemTypeName);
+        for (const creatorKey of Array.isArray(creatorList) ? creatorList : []) {
+          const normalized = String(creatorKey || "").trim();
+          if (normalized) bucket.add(normalized);
+        }
+      }
+    }
+    _compileFieldDefinitions() {
+      const addDefinition = (schemaItemType, definition, kind) => {
+        const itemTypeName = this._resolveZoteroItemType(schemaItemType);
+        if (!itemTypeName) return;
+        const field = String(definition?.field || definition || "").trim();
+        if (!field) return;
+        if (!this._fieldDefsByItemType.has(itemTypeName)) {
+          this._fieldDefsByItemType.set(itemTypeName, []);
+          this._fieldDefIndexByItemType.set(itemTypeName, /* @__PURE__ */ new Map());
+        }
+        const index = this._fieldDefIndexByItemType.get(itemTypeName);
+        if (index.has(field)) return;
+        const entry = {
+          field,
+          baseField: String(definition?.baseField || "").trim() || null,
+          kind
+        };
+        this._fieldDefsByItemType.get(itemTypeName).push(entry);
+        index.set(field, entry);
+        this._allFieldNames.add(field);
+      };
+      for (const [schemaItemType, fieldList] of Object.entries(this.raw?.FIELDS || {})) {
+        for (const definition of Array.isArray(fieldList) ? fieldList : []) {
+          addDefinition(schemaItemType, definition, "field");
+        }
+      }
+      for (const [schemaItemType, fieldList] of Object.entries(this.raw?.DATES || {})) {
+        for (const fieldName of Array.isArray(fieldList) ? fieldList : []) {
+          addDefinition(schemaItemType, { field: fieldName }, "date");
+        }
+      }
+    }
+    _compileCSLMappings() {
+      for (const [cslField, fields] of Object.entries(this.raw?.CSL_FIELDS || {})) {
+        const normalizedField = String(cslField || "").trim();
+        if (!normalizedField) continue;
+        this._cslFieldSources.set(
+          normalizedField,
+          (Array.isArray(fields) ? fields : []).map((field) => String(field || "").trim()).filter(Boolean)
+        );
+      }
+      for (const [cslField, fields] of Object.entries(this.raw?.CSL_DATES || {})) {
+        const normalizedField = String(cslField || "").trim();
+        if (!normalizedField) continue;
+        this._cslDateSources.set(
+          normalizedField,
+          (Array.isArray(fields) ? fields : []).map((field) => String(field || "").trim()).filter(Boolean)
+        );
+      }
+    }
+    _compileExtraCreatorTypes() {
+      const allKeys = /* @__PURE__ */ new Set();
+      for (const creatorKeys of this._creatorsByItemType.values()) {
+        for (const creatorKey of creatorKeys) allKeys.add(creatorKey);
+      }
+      let nextID = 9001;
+      this._extraCreatorTypes = Array.from(allKeys).sort().map((key) => {
+        const label = humanizeKey(key);
+        const normalizedKey = String(key).trim();
+        return {
+          key: normalizedKey,
+          creatorTypeID: String(nextID++),
+          creatorTypeName: `ibcslm-${toKebabCase(normalizedKey)}`,
+          label,
+          storage: "creator",
+          mlzType: normalizedKey,
+          cslField: toKebabCase(normalizedKey)
+        };
+      });
+    }
+    _compileSequence() {
+      for (const [schemaItemType, sequence] of Object.entries(this.raw?.SEQUENCE || {})) {
+        const itemTypeName = this._resolveZoteroItemType(schemaItemType);
+        if (!itemTypeName) continue;
+        if (!this._sequenceByItemType.has(itemTypeName)) {
+          this._sequenceByItemType.set(itemTypeName, []);
+        }
+        const target = this._sequenceByItemType.get(itemTypeName);
+        for (const fieldName of Array.isArray(sequence) ? sequence : []) {
+          const normalized = String(fieldName || "").trim();
+          if (normalized && !target.includes(normalized)) {
+            target.push(normalized);
+          }
+        }
+      }
+    }
+    _compileLocalization() {
+      this._localizedFieldsByLocale.clear();
+      this._localizedCreatorsByLocale.clear();
+      const localeSources = [
+        this.raw?.locales || {},
+        this.localizationRaw?.locales || {}
+      ];
+      const allLocales = /* @__PURE__ */ new Set();
+      for (const source of localeSources) {
+        for (const locale of Object.keys(source || {})) {
+          const normalizedLocale = String(locale || "").trim().toLowerCase();
+          if (normalizedLocale) allLocales.add(normalizedLocale);
+        }
+      }
+      for (const normalizedLocale of allLocales) {
+        const schemaPayload = this._getLocalePayload(this.raw?.locales, normalizedLocale);
+        const localizationPayload = this._getLocalePayload(this.localizationRaw?.locales, normalizedLocale);
+        const fields = this._mergeLocalizationBuckets(
+          schemaPayload?.fields,
+          localizationPayload?.fields
+        );
+        const creatorTypes = this._mergeLocalizationBuckets(
+          schemaPayload?.creatorTypes,
+          localizationPayload?.creatorTypes
+        );
+        this._localizedFieldsByLocale.set(normalizedLocale, fields);
+        this._localizedCreatorsByLocale.set(normalizedLocale, creatorTypes);
+      }
+    }
+    _mergeLocalizationBuckets(...sources) {
+      const out = /* @__PURE__ */ new Map();
+      for (const source of sources) {
+        for (const [key, value] of Object.entries(source || {})) {
+          const normalizedKey = String(key || "").trim();
+          const normalizedValue = String(value || "").trim();
+          if (normalizedKey && normalizedValue) {
+            out.set(normalizedKey, normalizedValue);
+          }
+        }
+      }
+      return out;
+    }
+    _normalizeLocalizationBucket(source) {
+      const out = /* @__PURE__ */ new Map();
+      for (const [key, value] of Object.entries(source || {})) {
+        const normalizedKey = String(key || "").trim();
+        const normalizedValue = String(value || "").trim();
+        if (normalizedKey && normalizedValue) {
+          out.set(normalizedKey, normalizedValue);
+        }
+      }
+      return out;
+    }
+    _getLocalePayload(source, normalizedLocale) {
+      const target = String(normalizedLocale || "").trim().toLowerCase();
+      if (!target || !source || typeof source !== "object") return null;
+      for (const [key, payload] of Object.entries(source)) {
+        const normalizedKey = String(key || "").trim().replace(/_/g, "-").toLowerCase();
+        if (normalizedKey === target) {
+          return payload || null;
+        }
+      }
+      return null;
+    }
+    _lookupLocalizedEntry(store, key, rawLocale = null) {
+      const normalizedKey = String(key || "").trim();
+      if (!normalizedKey) return "";
+      const candidates = this._getLocalizationLocaleCandidates(rawLocale);
+      for (const locale of candidates) {
+        const bucket = store.get(locale);
+        const value = bucket?.get(normalizedKey);
+        if (value) return value;
+      }
+      return "";
+    }
+    _getLocalizationLocaleCandidates(rawLocale) {
+      const candidates = [];
+      const push = (value) => {
+        const normalized = String(value || "").trim().toLowerCase();
+        if (normalized && !candidates.includes(normalized)) {
+          candidates.push(normalized);
+        }
+      };
+      for (const candidate of getLocaleCandidates(rawLocale)) {
+        push(candidate);
+        if (candidate === "us") {
+          push("en-us");
+          push("en");
+        }
+      }
+      push("en-us");
+      push("en");
+      return candidates;
+    }
+    _resolveZoteroItemType(schemaItemType) {
+      const key = String(schemaItemType || "").trim();
+      if (!key) return "";
+      const mapped = this._types?.[key]?.zotero;
+      return String(mapped || key).trim();
+    }
+  };
+
   // lib/main.mjs
   var _ctx;
   var LEGACY_COMMENTER_INFO_ROW_ID = "indigobook-cslm-commenter-row";
-  var BUNDLED_STYLE_FILES = [
-    "jm-indigobook.csl",
-    "jm-indigobook-law-review.csl"
-  ];
   var BUNDLED_TRANSLATOR_FILES = [
     "Lexis+.js",
     "Westlaw.js"
@@ -4624,6 +5630,24 @@ ${mlzBlock}` : mlzBlock;
       Zotero.logError(message);
     } catch (e) {
     }
+  }
+  async function _installStyleFileFallbackIfMissing({ styleXML, styleID, filename }) {
+    const stylesDir = Zotero?.getStylesDirectory?.();
+    if (!stylesDir || !filename || !styleXML || typeof IOUtils?.writeUTF8 !== "function") {
+      return false;
+    }
+    const destFile = stylesDir.clone();
+    destFile.append(filename);
+    if (destFile.exists()) {
+      try {
+        Zotero.debug(`[IndigoBook CSL-M] style fallback skipped (file exists): ${filename}`);
+      } catch (e) {
+      }
+      return !!Zotero?.Styles?.get?.(styleID);
+    }
+    await IOUtils.writeUTF8(destFile.path, styleXML);
+    await Zotero?.Styles?.reinit?.();
+    return !!Zotero?.Styles?.get?.(styleID);
   }
   function _unregisterLegacyCommenterInfoRow() {
     try {
@@ -4659,9 +5683,19 @@ ${mlzBlock}` : mlzBlock;
     const sourceURL = _styleInstallSourceURL(rootURI, relPath);
     let installed = false;
     try {
-      await installFn.call(Zotero.Styles, styleXML, sourceURL);
+      await installFn.call(Zotero.Styles, styleXML, sourceURL, true);
       installed = !!Zotero?.Styles?.get?.(styleID);
     } catch (e) {
+    }
+    if (!installed) {
+      try {
+        installed = await _installStyleFileFallbackIfMissing({
+          styleXML,
+          styleID,
+          filename: relPath.split("/").pop()
+        });
+      } catch (e) {
+      }
     }
     try {
       Zotero.debug(`[IndigoBook CSL-M] style ${installed ? "installed" : "install failed"}: ${styleID}`);
@@ -4669,7 +5703,24 @@ ${mlzBlock}` : mlzBlock;
     }
   }
   async function _ensureBundledStylesInstalled({ rootURI, dataStore }) {
-    for (const file of BUNDLED_STYLE_FILES) {
+    let files = null;
+    try {
+      files = await dataStore.loadJSON("styles/index.json");
+    } catch (e) {
+      try {
+        Zotero.debug(`[IndigoBook CSL-M] style install skipped (styles/index.json unavailable): ${String(e)}`);
+      } catch (_) {
+      }
+      return;
+    }
+    if (!Array.isArray(files) || !files.length) {
+      try {
+        Zotero.debug("[IndigoBook CSL-M] style install skipped (styles/index.json empty or invalid)");
+      } catch (e) {
+      }
+      return;
+    }
+    for (const file of files) {
       const relPath = `styles/${file}`;
       try {
         await _installStyleIfMissing({ rootURI, dataStore, relPath });
@@ -4743,6 +5794,7 @@ ${mlzBlock}` : mlzBlock;
       modules: null,
       abbrevs: null,
       caseCourtMapper: null,
+      schemaConfig: null,
       patcher: null,
       prefsUI: null
     };
@@ -4755,11 +5807,15 @@ ${mlzBlock}` : mlzBlock;
     await _ctx.abbrevs.preload();
     _ctx.caseCourtMapper = new CaseCourtMapper({ dataStore: _ctx.data, locale });
     await _ctx.caseCourtMapper.preload();
+    _ctx.schemaConfig = new SchemaConfig({ dataStore: _ctx.data });
+    await _ctx.schemaConfig.preload();
     _ctx.patcher = new Patcher({
+      pluginID: id,
       moduleLoader: _ctx.modules,
       abbrevService: _ctx.abbrevs,
       jurisdiction: Jurisdiction,
-      caseCourtMapper: _ctx.caseCourtMapper
+      caseCourtMapper: _ctx.caseCourtMapper,
+      schemaConfig: _ctx.schemaConfig
     });
     _ctx.patcher.patch();
     _ctx.prefsUI = new PrefsUI({
