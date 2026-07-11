@@ -153,8 +153,13 @@ ${mlzBlock}` : mlzBlock;
       return this._normalizeJurisdiction(this._decodeLengthPrefixedJurisdiction(String(value)) || "");
     }
     static getMLZItemType(itemOrExtra) {
-      const fields = this.getMLZExtraFields(itemOrExtra);
-      return String(fields?.xtype || fields?.itemType || "").trim();
+      const extra = typeof itemOrExtra === "string" ? itemOrExtra : itemOrExtra?.getField?.("extra") || itemOrExtra?.extra || "";
+      const payload = this._getMLZPayloadAndRange(extra).payload || null;
+      if (!payload || typeof payload !== "object" || Array.isArray(payload)) return "";
+      const nestedFields = payload.extrafields && typeof payload.extrafields === "object" && !Array.isArray(payload.extrafields) ? payload.extrafields : null;
+      return String(
+        payload.xtype || payload.itemType || nestedFields?.xtype || nestedFields?.itemType || ""
+      ).trim();
     }
     static updateMLZJurisdiction(itemOrExtra, jurisdiction, displayValue = "") {
       const normalized = this._normalizeJurisdiction(jurisdiction || "");
@@ -162,9 +167,36 @@ ${mlzBlock}` : mlzBlock;
       return this.updateMLZExtraField(itemOrExtra, "jurisdiction", encoded);
     }
     static updateMLZItemType(itemOrExtra, itemType) {
-      let nextExtra = this.updateMLZExtraField(itemOrExtra, "xtype", String(itemType || "").trim());
-      nextExtra = this.updateMLZExtraField(nextExtra, "itemType", "");
-      return nextExtra;
+      const extra = typeof itemOrExtra === "string" ? itemOrExtra : itemOrExtra?.getField?.("extra") || itemOrExtra?.extra || "";
+      const parsed = this._getMLZPayloadAndRange(extra);
+      const payload = parsed.payload || {};
+      const value = String(itemType || "").trim();
+      if (value) payload.xtype = value;
+      else delete payload.xtype;
+      delete payload.itemType;
+      if (payload.extrafields && typeof payload.extrafields === "object" && !Array.isArray(payload.extrafields)) {
+        delete payload.extrafields.xtype;
+        delete payload.extrafields.itemType;
+        if (!Object.keys(payload.extrafields).length) {
+          delete payload.extrafields;
+        }
+      }
+      const hasExtraFields = this._hasMLZFields(payload);
+      const hasExtraCreators = Array.isArray(payload.extracreators) && payload.extracreators.length;
+      const hasControlSections = this._hasMLZControlSections(payload);
+      if (!hasExtraFields && !hasExtraCreators && !hasControlSections) {
+        if (parsed.start != null && parsed.end != null) {
+          return this._removeMLZBlock(extra, parsed.start, parsed.end);
+        }
+        return extra;
+      }
+      const mlzBlock = `mlzsync1:${JSON.stringify(payload)}`;
+      if (parsed.start != null && parsed.end != null) {
+        return `${extra.slice(0, parsed.start)}${mlzBlock}${extra.slice(parsed.end)}`;
+      }
+      const base = String(extra || "").trimEnd();
+      return base ? `${base}
+${mlzBlock}` : mlzBlock;
     }
     static updateMLZExtraField(itemOrExtra, fieldName, fieldValue) {
       const extra = typeof itemOrExtra === "string" ? itemOrExtra : itemOrExtra?.getField?.("extra") || itemOrExtra?.extra || "";
@@ -282,12 +314,17 @@ ${mlzBlock}` : mlzBlock;
     }
     static _getMLZFieldObject(payload) {
       if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
+      const topLevelFields = Object.fromEntries(
+        Object.entries(payload).filter(([key]) => !this._getMLZControlKeys().includes(key))
+      );
       if (payload.extrafields && typeof payload.extrafields === "object" && !Array.isArray(payload.extrafields)) {
-        return payload.extrafields;
+        return {
+          ...topLevelFields,
+          ...payload.extrafields
+        };
       }
-      const bareEntries = Object.entries(payload).filter(([key]) => key !== "extracreators");
-      if (!bareEntries.length) return null;
-      return Object.fromEntries(bareEntries);
+      if (!Object.keys(topLevelFields).length) return null;
+      return topLevelFields;
     }
     static _ensureMLZFieldObject(payload) {
       if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
@@ -296,7 +333,7 @@ ${mlzBlock}` : mlzBlock;
       if (payload.extrafields && typeof payload.extrafields === "object" && !Array.isArray(payload.extrafields)) {
         return payload.extrafields;
       }
-      if ("extracreators" in payload) {
+      if (this._hasMLZControlSections(payload)) {
         if (!payload.extrafields || typeof payload.extrafields !== "object" || Array.isArray(payload.extrafields)) {
           payload.extrafields = {};
         }
@@ -312,10 +349,14 @@ ${mlzBlock}` : mlzBlock;
     }
     static _hasMLZFields(payload) {
       if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
-      if (payload.extrafields && typeof payload.extrafields === "object" && !Array.isArray(payload.extrafields)) {
-        return Object.keys(payload.extrafields).length > 0;
-      }
-      return Object.keys(payload).some((key) => key !== "extracreators");
+      const fields = this._getMLZFieldObject(payload);
+      return !!fields && Object.keys(fields).length > 0;
+    }
+    static _hasMLZControlSections(payload) {
+      return this._getMLZControlKeys().some((key) => key in payload);
+    }
+    static _getMLZControlKeys() {
+      return ["extracreators", "extrafields", "multifields", "multicreators", "xtype", "itemType"];
     }
     static _normalizeExtraCreator(creator, creatorType) {
       if (!creator || typeof creator !== "object") return null;
@@ -2307,17 +2348,17 @@ ${mlzBlock}` : mlzBlock;
       }
       const self = this;
       creatorTypes.getID = function(creatorType) {
-        const extraPersonType = self._getExtraPersonConfigByCreatorType(creatorType);
+        const extraPersonType = self._getExtraPersonConfigBySyntheticCreatorType(creatorType);
         if (extraPersonType) return extraPersonType.creatorTypeID;
         return self._orig.creatorTypesGetID?.apply(this, arguments);
       };
       creatorTypes.getName = function(creatorTypeID) {
-        const extraPersonType = self._getExtraPersonConfigByCreatorType(creatorTypeID);
+        const extraPersonType = self._getExtraPersonConfigBySyntheticCreatorType(creatorTypeID);
         if (extraPersonType) return extraPersonType.creatorTypeName;
         return self._orig.creatorTypesGetName?.apply(this, arguments);
       };
       creatorTypes.getLocalizedString = function(creatorType) {
-        const extraPersonType = self._getExtraPersonConfigByCreatorType(creatorType);
+        const extraPersonType = self._getExtraPersonConfigBySyntheticCreatorType(creatorType);
         if (extraPersonType) return self._getExtraPersonLabel(extraPersonType);
         return self._orig.creatorTypesGetLocalizedString?.apply(this, arguments);
       };
@@ -2326,7 +2367,7 @@ ${mlzBlock}` : mlzBlock;
         if (!self._itemTypeSupportsExtraPerson(itemTypeID)) return result;
         const next = [...result];
         for (const extraPersonType of self._getExtraPersonTypesForItemType(itemTypeID)) {
-          if (next.some((entry) => self._getExtraPersonConfigByCreatorType(entry?.id || entry?.name)?.key === extraPersonType.key)) continue;
+          if (next.some((entry) => self._getExtraPersonConfigBySyntheticCreatorType(entry?.id || entry?.name)?.key === extraPersonType.key)) continue;
           next.push({ id: extraPersonType.creatorTypeID, name: extraPersonType.creatorTypeName });
         }
         return next;
@@ -2464,7 +2505,7 @@ ${mlzBlock}` : mlzBlock;
       const self = this;
       const onPopupShowing = function(event) {
         try {
-          self._augmentNewItemPopup(event?.target || null);
+          self._augmentAnyNewItemPopup(event?.target || null);
         } catch (e) {
           try {
             Zotero.debug(`[IndigoBook CSL-M] new item popup patch failed: ${String(e)}`);
@@ -2472,7 +2513,7 @@ ${mlzBlock}` : mlzBlock;
           }
         }
       };
-      doc.addEventListener("popupshowing", onPopupShowing, true);
+      doc.addEventListener("popupshowing", onPopupShowing, false);
       this._orig.newItemMenuDocument = doc;
       this._orig.newItemMenuPopupShowing = onPopupShowing;
     }
@@ -2494,8 +2535,7 @@ ${mlzBlock}` : mlzBlock;
         zoteroPaneLocal.updateNewItemTypes = function(...args) {
           const result = self._orig.updateNewItemTypes.apply(this, args);
           try {
-            const popup = doc?.getElementById?.("zotero-tb-add")?.firstElementChild || null;
-            self._augmentKnownNewItemPopup(popup, "toolbar");
+            self._augmentKnownNewItemPopups(doc, "toolbar");
           } catch (e) {
             try {
               Zotero.debug(`[IndigoBook CSL-M] toolbar new-item patch failed: ${String(e)}`);
@@ -2520,8 +2560,7 @@ ${mlzBlock}` : mlzBlock;
         zoteroStandalone.buildNewItemMenu = function(...args) {
           const result = self._orig.buildNewItemMenu.apply(this, args);
           try {
-            const popup = doc?.getElementById?.("menu_NewItemPopup") || null;
-            self._augmentKnownNewItemPopup(popup, "file-menu");
+            self._augmentKnownNewItemPopups(doc, "file-menu");
           } catch (e) {
             try {
               Zotero.debug(`[IndigoBook CSL-M] file-menu new-item patch failed: ${String(e)}`);
@@ -2551,7 +2590,7 @@ ${mlzBlock}` : mlzBlock;
     _unpatchNewItemMenus() {
       try {
         if (this._orig.newItemMenuDocument && this._orig.newItemMenuPopupShowing) {
-          this._orig.newItemMenuDocument.removeEventListener("popupshowing", this._orig.newItemMenuPopupShowing, true);
+          this._orig.newItemMenuDocument.removeEventListener("popupshowing", this._orig.newItemMenuPopupShowing, false);
         }
       } catch (e) {
       } finally {
@@ -2560,95 +2599,163 @@ ${mlzBlock}` : mlzBlock;
         this._pendingCustomNewItemTypes = [];
       }
     }
-    _augmentNewItemPopup(popup) {
-      if (!popup || popup.localName !== "menupopup") return;
-      if (popup.querySelector?.(`[${this._newItemMenuMarkerAttribute}="true"]`)) return;
-      if (popup.querySelector?.("[data-ibcslm-option-key], [data-ibcslm-custom-item-type]")) return;
-      if (popup.closest?.("#itembox-field-itemType-menu")) return;
-      const nativeEntries = this._extractNativeItemTypeMenuEntriesFromPopup(popup);
-      if (!this._isNewItemPopupCandidate(popup, nativeEntries)) return;
-      const customByBase = this._getCustomItemTypeOptionsByBase();
-      if (!customByBase.size) return;
-      const doc = popup.ownerDocument;
-      const inserted = /* @__PURE__ */ new Set();
-      for (const entry of nativeEntries) {
-        const customOptions = customByBase.get(entry.nativeType) || [];
-        let insertAfter = entry.node;
-        for (const option of customOptions) {
-          if (inserted.has(option.itemType)) continue;
-          inserted.add(option.itemType);
-          const menuitem = this._buildCustomNewItemMenuitem(doc, entry.node, option);
-          if (!menuitem) continue;
-          popup.insertBefore(menuitem, insertAfter.nextSibling);
-          insertAfter = menuitem;
-        }
+    _augmentAnyNewItemPopup(node) {
+      const popup = this._coerceMenuPopup(node);
+      if (!popup) return;
+      if (!this._isKnownNewItemMenuPopup(popup)) return;
+      this._augmentNewItemPopupWithCustomTypes(popup);
+    }
+    _coerceMenuPopup(node) {
+      if (!node) return null;
+      if (node.localName === "menupopup") return node;
+      return node.querySelector?.("menupopup") || null;
+    }
+    /**
+     * Whether `popup` is specifically the toolbar "+" button's popup or the
+     * File > New Item submenu's popup -- and NOT some other, unrelated
+     * menupopup/submenu/context-menu elsewhere in the app. This check must
+     * stay strict (exact known IDs only): a loose structural heuristic (e.g.
+     * "looks like a plain list of >=8 menuitems") also matches things like the
+     * column-picker or sort submenus, causing custom entries to leak into
+     * every menu in the app.
+     */
+    _isKnownNewItemMenuPopup(popup) {
+      if (!popup || popup.localName !== "menupopup") return false;
+      const knownIDs = ["menu_NewItemPopup", "menu_newItemPopup", "newItemPopup", "zotero-tb-add-menu", "zotero-add-item"];
+      if (knownIDs.includes(popup.id)) return true;
+      const parentID = popup.parentNode?.id;
+      return parentID === "zotero-tb-add" || knownIDs.includes(parentID);
+    }
+    _augmentKnownNewItemPopups(doc = Zotero.getMainWindow?.()?.document) {
+      if (!doc) return;
+      const candidates = /* @__PURE__ */ new Set();
+      for (const id of [
+        "zotero-tb-add",
+        "zotero-tb-add-menu",
+        "zotero-add-item",
+        "menu_NewItemPopup",
+        "menu_newItemPopup",
+        "newItemPopup"
+      ]) {
+        const node = doc.getElementById?.(id);
+        const popup = this._coerceMenuPopup(node);
+        if (popup) candidates.add(popup);
+        if (node?.localName === "menupopup") candidates.add(node);
       }
-      const fallbackAnchor = this._getNewItemPopupInsertAnchor(popup);
-      for (const options of customByBase.values()) {
-        for (const option of options) {
-          if (inserted.has(option.itemType)) continue;
-          inserted.add(option.itemType);
-          const menuitem = this._buildCustomNewItemMenuitem(doc, null, option);
-          if (!menuitem) continue;
-          popup.insertBefore(menuitem, fallbackAnchor);
-        }
+      for (const popup of candidates) {
+        this._augmentNewItemPopupWithCustomTypes(popup);
       }
     }
-    _augmentKnownNewItemPopup(popup, mode = "toolbar") {
+    /**
+     * Insert our custom item-type entries into a "New Item" menupopup,
+     * interleaved in true alphabetical order among the existing (native)
+     * entries -- not just appended as a sorted group at the end.
+     *
+     * This intentionally does NOT try to detect which native menuitem
+     * corresponds to which native base item type. Zotero's own toolbar/File-menu
+     * builders (`updateNewItemTypes()` / `buildNewItemMenu()`) only set
+     * `label`/`tooltiptext` on their generated `<menuitem>`s -- they carry no
+     * `value`/`typeid` attribute we could match against reliably -- so matching
+     * by type is fragile and can silently insert nothing at all if it fails.
+     * Instead, each custom entry is positioned purely by comparing its label
+     * against the labels of the menuitems already in the popup, which both
+     * native and custom entries always have.
+     */
+    _augmentNewItemPopupWithCustomTypes(popup) {
       if (!popup || popup.localName !== "menupopup") return;
+      if (!this._isKnownNewItemMenuPopup(popup)) return;
+      if (popup.closest?.("#itembox-field-itemType-menu")) return;
+      if (popup.querySelector?.("[data-ibcslm-option-key]")) return;
+      if (popup.state && popup.state !== "closed" && popup.state !== "showing") return;
       for (const node of Array.from(popup.querySelectorAll?.(`[${this._newItemMenuMarkerAttribute}="true"]`) || [])) {
         node.remove();
       }
-      const nativeEntries = this._extractNativeItemTypeMenuEntriesFromPopup(popup);
-      if (!nativeEntries.length) return;
-      const customByBase = this._getCustomItemTypeOptionsByBase();
-      if (!customByBase.size) return;
+      const options = this._getSortedCustomItemTypeOptions();
+      if (!options.length) return;
       const doc = popup.ownerDocument;
-      const inserted = /* @__PURE__ */ new Set();
-      for (const entry of nativeEntries) {
-        const customOptions = customByBase.get(entry.nativeType) || [];
-        let insertAfter = entry.node;
-        for (const option of customOptions) {
-          if (inserted.has(option.itemType)) continue;
-          inserted.add(option.itemType);
-          const menuitem = this._buildCustomNewItemMenuitemForKnownMenu(doc, option, mode, entry.node);
-          if (!menuitem) continue;
-          popup.insertBefore(menuitem, insertAfter.nextSibling);
-          insertAfter = menuitem;
-        }
+      const seen = /* @__PURE__ */ new Set();
+      for (const option of options) {
+        const itemType = String(option?.itemType || "").trim();
+        const baseItemType = String(option?.baseItemType || "").trim();
+        if (!itemType || !baseItemType || seen.has(itemType)) continue;
+        seen.add(itemType);
+        const label = String(option?.label || "").trim() || itemType;
+        const menuitem = doc.createXULElement("menuitem");
+        menuitem.setAttribute(this._newItemMenuMarkerAttribute, "true");
+        menuitem.setAttribute("label", label);
+        menuitem.setAttribute("tooltiptext", itemType);
+        menuitem.addEventListener("command", (event) => {
+          event?.preventDefault?.();
+          event?.stopPropagation?.();
+          this._createCustomNewItem(itemType, baseItemType);
+        });
+        this._insertMenuitemInAlphabeticalPosition(popup, menuitem, label);
       }
     }
-    _buildCustomNewItemMenuitemForKnownMenu(doc, option, mode = "toolbar", templateNode = null) {
-      if (!doc || !option?.itemType || !option?.baseItemType) return null;
-      const menuitem = templateNode?.cloneNode?.(false) || doc.createXULElement("menuitem");
-      menuitem.removeAttribute?.("id");
-      menuitem.removeAttribute?.("command");
-      menuitem.removeAttribute?.("oncommand");
-      menuitem.removeAttribute?.("observes");
-      menuitem.setAttribute(this._newItemMenuMarkerAttribute, "true");
-      menuitem.setAttribute("label", option.label);
-      menuitem.setAttribute("tooltiptext", "");
-      menuitem.setAttribute("typeid", this._getNativeItemTypeMenuValue(option.baseItemType));
-      menuitem.setAttribute("value", this._getCustomItemTypeMenuValue(option.itemType));
-      menuitem.setAttribute("data-ibcslm-base-item-type", option.baseItemType);
-      menuitem.setAttribute("data-ibcslm-custom-item-type", option.itemType);
-      if (mode === "file-menu") {
-        menuitem.className = "zotero-tb-add";
-      } else if (templateNode?.className) {
-        menuitem.className = templateNode.className;
+    /**
+     * Insert `menuitem` into `popup` immediately before the first sibling
+     * `<menuitem>` whose label sorts after `label`, or at the end if none does.
+     *
+     * Zotero's native "New Item" menus aren't one single alphabetically sorted
+     * list: the toolbar button puts a "recently used" subset of types on top
+     * (itself alphabetically sorted, but a small subset), then a separator,
+     * then the complete alphabetically sorted list of all types below it. The
+     * File menu similarly splits "primary" and "secondary" types across a
+     * separator. Comparing a custom entry's label against the *whole* popup
+     * would frequently match something early in that small top section,
+     * making custom entries appear to jump to the top of the menu. To avoid
+     * that, only compare against -- and insert within -- the section *after*
+     * the last separator, which is always a complete, non-truncated
+     * alphabetically sorted list.
+     */
+    _insertMenuitemInAlphabeticalPosition(popup, menuitem, label) {
+      let collation = null;
+      try {
+        collation = Zotero?.getLocaleCollation?.();
+      } catch (e) {
       }
-      menuitem.addEventListener("command", async (event) => {
-        event?.preventDefault?.();
-        event?.stopPropagation?.();
-        await this._createCustomNewItem(option.itemType, option.baseItemType);
+      const children = Array.from(popup.children || []);
+      let lastSeparatorIndex = -1;
+      children.forEach((node, index) => {
+        if (node?.localName === "menuseparator") lastSeparatorIndex = index;
       });
-      return menuitem;
+      let referenceNode = null;
+      for (let index = lastSeparatorIndex + 1; index < children.length; index += 1) {
+        const node = children[index];
+        if (node?.localName !== "menuitem") continue;
+        const siblingLabel = String(node.getAttribute("label") || "");
+        const comparison = collation?.compareString ? collation.compareString(1, label, siblingLabel) : label.localeCompare(siblingLabel, void 0, { sensitivity: "base" });
+        if (comparison < 0) {
+          referenceNode = node;
+          break;
+        }
+      }
+      popup.insertBefore(menuitem, referenceNode);
+    }
+    /**
+     * Custom item-type options, sorted alphabetically by label (locale-aware,
+     * matching how Zotero itself sorts native item types in these same menus).
+     */
+    _getSortedCustomItemTypeOptions() {
+      const locale = Zotero?.locale || "en-US";
+      const options = (this.schemaConfig?.getCustomItemTypeOptions?.(locale) || []).slice();
+      let collation = null;
+      try {
+        collation = Zotero?.getLocaleCollation?.();
+      } catch (e) {
+      }
+      options.sort((a, b) => {
+        const labelA = String(a?.label || a?.itemType || "");
+        const labelB = String(b?.label || b?.itemType || "");
+        if (collation?.compareString) return collation.compareString(1, labelA, labelB);
+        return labelA.localeCompare(labelB, void 0, { sensitivity: "base" });
+      });
+      return options;
     }
     async _createCustomNewItem(itemType, baseItemType) {
       const customItemType = String(itemType || "").trim();
       const nativeType = String(baseItemType || "").trim();
       if (!customItemType || !nativeType) return null;
-      this._clearPendingCustomNewItemTypesForBase(nativeType);
       const typeID = Zotero?.ItemTypes?.getID?.(nativeType);
       const mainWindow = Zotero.getMainWindow?.();
       const pane = mainWindow?.ZoteroPane_Local || mainWindow?.ZoteroPane;
@@ -2656,7 +2763,7 @@ ${mlzBlock}` : mlzBlock;
       const item = this._resolveCreatedZoteroItem(created);
       if (!item || item.deleted) return item || null;
       const extra = String(item.getField?.("extra") || "");
-      const nextExtra = this.Jurisdiction.updateMLZItemType?.(extra, customItemType) || extra;
+      const nextExtra = this.Jurisdiction.updateMLZItemType?.(extra, customItemType) ?? extra;
       if (nextExtra !== extra) {
         item.setField("extra", nextExtra);
         await item.saveTx({ skipDateModifiedUpdate: true });
@@ -2672,84 +2779,6 @@ ${mlzBlock}` : mlzBlock;
       if (!created) return null;
       if (typeof created.getField === "function" && typeof created.setField === "function") return created;
       return this._getZoteroItemByAnyID(created);
-    }
-    _clearPendingCustomNewItemTypesForBase(baseItemType) {
-      const nativeType = String(baseItemType || "").trim();
-      if (!nativeType || !this._pendingCustomNewItemTypes.length) return;
-      this._pendingCustomNewItemTypes = this._pendingCustomNewItemTypes.filter((entry) => {
-        return String(entry?.baseItemType || "").trim() !== nativeType;
-      });
-    }
-    _extractNativeItemTypeMenuEntriesFromPopup(popup) {
-      const out = [];
-      for (const node of Array.from(popup?.children || [])) {
-        if (node?.localName !== "menuitem") continue;
-        if (node.hasAttribute?.(this._newItemMenuMarkerAttribute)) continue;
-        if (node.hasAttribute?.("data-ibcslm-custom-item-type")) continue;
-        const label = String(node.getAttribute("label") || "").trim();
-        const value = String(
-          node.getAttribute("value") || node.getAttribute("typeid") || node.value || ""
-        ).trim();
-        const nativeType = this._resolveNativeItemTypeName(value, label) || "";
-        if (!nativeType) continue;
-        out.push({ node, nativeType, label, value });
-      }
-      return out;
-    }
-    _isNewItemPopupCandidate(popup, nativeEntries) {
-      if (!popup || !nativeEntries.length) return false;
-      const idish = [
-        popup.id,
-        popup.getAttribute?.("id"),
-        popup.getAttribute?.("context"),
-        popup.parentNode?.id,
-        popup.parentNode?.getAttribute?.("id"),
-        popup.triggerNode?.id,
-        popup.triggerNode?.getAttribute?.("id"),
-        popup.anchorNode?.id,
-        popup.anchorNode?.getAttribute?.("id")
-      ].filter(Boolean).join(" ").toLowerCase();
-      if (/(^|[\s_-])(new|add)([\s_-])?item/.test(idish) || /(item)([\s_-])?(new|add)/.test(idish) || /zotero-tb-add|newitem/.test(idish)) {
-        return true;
-      }
-      const childNames = Array.from(popup.children || []).map((node) => node?.localName || "");
-      const onlyMenuChildren = childNames.every((name) => ["menuitem", "menuseparator"].includes(name));
-      return onlyMenuChildren && nativeEntries.length >= 8;
-    }
-    _getCustomItemTypeOptionsByBase() {
-      const out = /* @__PURE__ */ new Map();
-      for (const option of this.schemaConfig?.getCustomItemTypeOptions?.(Zotero?.locale || "en-US") || []) {
-        const baseType = String(option.baseItemType || "").trim();
-        const itemType = String(option.itemType || "").trim();
-        if (!baseType || !itemType) continue;
-        if (!out.has(baseType)) out.set(baseType, []);
-        out.get(baseType).push({
-          itemType,
-          baseItemType: baseType,
-          label: String(option.label || "").trim() || itemType
-        });
-      }
-      return out;
-    }
-    _buildCustomNewItemMenuitem(doc, templateNode, option) {
-      if (!doc || !option?.itemType || !option?.baseItemType) return null;
-      const menuitem = templateNode?.cloneNode?.(true) || doc.createXULElement("menuitem");
-      menuitem.setAttribute(this._newItemMenuMarkerAttribute, "true");
-      menuitem.setAttribute("label", option.label);
-      menuitem.setAttribute("tooltiptext", option.itemType);
-      menuitem.setAttribute("typeid", this._getNativeItemTypeMenuValue(option.baseItemType));
-      menuitem.setAttribute("value", this._getNativeItemTypeMenuValue(option.baseItemType));
-      menuitem.setAttribute("data-ibcslm-custom-item-type", option.itemType);
-      menuitem.addEventListener("command", () => {
-        this._queuePendingCustomNewItemType(option.itemType, option.baseItemType);
-      });
-      return menuitem;
-    }
-    _getNewItemPopupInsertAnchor(popup) {
-      for (const node of Array.from(popup?.children || [])) {
-        if (node?.localName === "menuseparator") return node;
-      }
-      return null;
     }
     _queuePendingCustomNewItemType(itemType, baseItemType) {
       const customItemType = String(itemType || "").trim();
@@ -2787,7 +2816,7 @@ ${mlzBlock}` : mlzBlock;
       if (matchIndex === -1) return false;
       const [match] = this._pendingCustomNewItemTypes.splice(matchIndex, 1);
       const extra = String(item.getField?.("extra") || "");
-      const nextExtra = this.Jurisdiction.updateMLZItemType?.(extra, match.itemType) || extra;
+      const nextExtra = this.Jurisdiction.updateMLZItemType?.(extra, match.itemType) ?? extra;
       if (nextExtra === extra) return false;
       item.setField("extra", nextExtra);
       await item.saveTx({ skipDateModifiedUpdate: true });
@@ -2989,7 +3018,7 @@ ${mlzBlock}` : mlzBlock;
       const effectiveJurisdiction = inferredJurisdiction;
       const canRewriteJurisdiction = !mlzJurisdiction || /^us(?::|$)/.test(mlzJurisdiction);
       if (reporter && reporter !== mlzReporter) {
-        nextExtra = this.Jurisdiction.updateMLZExtraField?.(nextExtra, "reporter", reporter) || nextExtra;
+        nextExtra = this.Jurisdiction.updateMLZExtraField?.(nextExtra, "reporter", reporter) ?? nextExtra;
       }
       if (!reporter && mlzReporter) {
         item.setField("reporter", mlzReporter);
@@ -2997,10 +3026,10 @@ ${mlzBlock}` : mlzBlock;
       }
       if (canRewriteJurisdiction && effectiveJurisdiction && effectiveJurisdiction !== mlzJurisdiction) {
         const displayJurisdiction = this.abbrevService.formatJurisdictionDisplay(effectiveJurisdiction);
-        nextExtra = this.Jurisdiction.updateMLZJurisdiction?.(nextExtra, effectiveJurisdiction, displayJurisdiction) || nextExtra;
+        nextExtra = this.Jurisdiction.updateMLZJurisdiction?.(nextExtra, effectiveJurisdiction, displayJurisdiction) ?? nextExtra;
       }
       if (effectiveCourt && effectiveCourt !== mlzCourt) {
-        nextExtra = this.Jurisdiction.updateMLZExtraField?.(nextExtra, "court", effectiveCourt) || nextExtra;
+        nextExtra = this.Jurisdiction.updateMLZExtraField?.(nextExtra, "court", effectiveCourt) ?? nextExtra;
       }
       if (!effectiveCourt && mlzCourt) {
         item.setField("court", mlzCourt);
@@ -3023,9 +3052,10 @@ ${mlzBlock}` : mlzBlock;
       if (this._syncInFlight.has(normalizedID)) return false;
       this._syncInFlight.add(normalizedID);
       try {
+        const itemTypeChanged = await this._syncStoredCustomItemType(itemID);
         const caseChanged = await this._syncCaseReporterFromFieldsAndMLZ(itemID);
         const schemaChanged = await this._syncSchemaConfiguredFields(itemID);
-        return !!(caseChanged || schemaChanged);
+        return !!(itemTypeChanged || caseChanged || schemaChanged);
       } catch (e) {
         try {
           Zotero.logError(e);
@@ -3039,6 +3069,25 @@ ${mlzBlock}` : mlzBlock;
       } finally {
         this._syncInFlight.delete(normalizedID);
       }
+    }
+    async _syncStoredCustomItemType(itemID) {
+      const item = this._getZoteroItemByAnyID(itemID);
+      if (!item || item.deleted) return false;
+      const nativeItemType = this._getItemTypeNameByID(item.itemTypeID);
+      const storedItemType = this._getStoredCustomItemTypeName(item);
+      if (!storedItemType) return false;
+      const expectedNativeType = this.schemaConfig?.getBaseItemType?.(storedItemType) || "";
+      if (!expectedNativeType || expectedNativeType === nativeItemType) return false;
+      const extra = String(item.getField?.("extra") || "");
+      const nextExtra = this.Jurisdiction.updateMLZItemType?.(extra, "") ?? extra;
+      if (nextExtra === extra) return false;
+      item.setField("extra", nextExtra);
+      await item.saveTx({ skipDateModifiedUpdate: true });
+      try {
+        Zotero.debug(`[IndigoBook CSL-M] cleared stale custom item type: item=${String(item.id || "")} native=${nativeItemType} stale=${storedItemType}`);
+      } catch (e) {
+      }
+      return true;
     }
     async _syncSchemaConfiguredFields(itemID) {
       const item = this._getZoteroItemByAnyID(itemID);
@@ -3060,7 +3109,7 @@ ${mlzBlock}` : mlzBlock;
           const mlzJurisdiction = this.Jurisdiction.getMLZJurisdiction?.(extra) || "";
           if (nativeFieldName && normalizedNative && normalizedNative !== mlzJurisdiction) {
             const displayJurisdiction = this.abbrevService.formatJurisdictionDisplay(normalizedNative);
-            nextExtra = this.Jurisdiction.updateMLZJurisdiction?.(nextExtra, normalizedNative, displayJurisdiction) || nextExtra;
+            nextExtra = this.Jurisdiction.updateMLZJurisdiction?.(nextExtra, normalizedNative, displayJurisdiction) ?? nextExtra;
           }
           if (nativeFieldName && !normalizedNative && mlzJurisdiction) {
             item.setField(nativeFieldName, mlzJurisdiction);
@@ -3070,7 +3119,7 @@ ${mlzBlock}` : mlzBlock;
         }
         const mlzValue = String(mlzFields?.[definition.field] || "").trim();
         if (nativeFieldName && nativeValue && nativeValue !== mlzValue) {
-          nextExtra = this.Jurisdiction.updateMLZExtraField?.(nextExtra, definition.field, nativeValue) || nextExtra;
+          nextExtra = this.Jurisdiction.updateMLZExtraField?.(nextExtra, definition.field, nativeValue) ?? nextExtra;
         }
         if (nativeFieldName && !nativeValue && mlzValue) {
           item.setField(nativeFieldName, mlzValue);
@@ -3664,7 +3713,7 @@ ${mlzBlock}` : mlzBlock;
         if (!selectedValue) return;
         if (selectedValue.endsWith("||__no_entry__")) {
           const extra = String(item.getField?.("extra") || "");
-          let nextExtra = this.Jurisdiction.updateMLZExtraField?.(extra, "court", "") || extra;
+          let nextExtra = this.Jurisdiction.updateMLZExtraField?.(extra, "court", "") ?? extra;
           if (nextExtra === extra && String(item.getField?.("court") || "").trim() === "") return;
           item.setField("extra", nextExtra);
           item.setField("court", "");
@@ -3973,7 +4022,7 @@ ${mlzBlock}` : mlzBlock;
         extra,
         extraPersonType.mlzType,
         person ? [person] : []
-      ) || extra;
+      ) ?? extra;
       if (nextExtra !== extra) {
         item.setField("extra", nextExtra);
       }
@@ -4022,6 +4071,14 @@ ${mlzBlock}` : mlzBlock;
         return normalized === String(this._getExtraPersonLabel(config)).toLowerCase();
       }) || null;
     }
+    _getExtraPersonConfigBySyntheticCreatorType(value) {
+      const normalized = String(value || "").trim().toLowerCase();
+      if (!normalized) return null;
+      return this._extraPersonTypes.find((config) => {
+        if (normalized === String(config.creatorTypeID).toLowerCase()) return true;
+        return normalized === String(config.creatorTypeName).toLowerCase();
+      }) || null;
+    }
     _getExtraPersonLabel(extraPersonType) {
       if (!extraPersonType?.key) return "";
       return this.schemaConfig?.getLocalizedCreatorLabel?.(extraPersonType.key, Zotero?.locale || "en-US") || extraPersonType.label || String(extraPersonType.key || "");
@@ -4061,7 +4118,7 @@ ${mlzBlock}` : mlzBlock;
     }
     _getItemTypeName(item) {
       const nativeItemType = this._getItemTypeNameByID(item?.itemTypeID);
-      const storedItemType = String(this.Jurisdiction.getMLZItemType?.(item) || "").trim();
+      const storedItemType = this._getStoredCustomItemTypeName(item);
       if (!storedItemType || !this.schemaConfig?.isCustomItemType?.(storedItemType)) {
         return nativeItemType;
       }
@@ -4075,14 +4132,17 @@ ${mlzBlock}` : mlzBlock;
       }
       return "";
     }
+    _getStoredCustomItemTypeName(item) {
+      return String(this.Jurisdiction.getMLZItemType?.(item) || "").trim();
+    }
     async _saveJurisdictionFromMenu(item, selectedCode) {
       try {
         const current = this.Jurisdiction.getMLZJurisdiction?.(item) || "";
         if (current === selectedCode) return;
         const extra = String(item.getField?.("extra") || "");
         const displayValue = this.abbrevService.formatJurisdictionDisplay(selectedCode);
-        let nextExtra = this.Jurisdiction.updateMLZJurisdiction?.(extra, selectedCode, displayValue) || extra;
-        nextExtra = this.Jurisdiction.updateMLZExtraField?.(nextExtra, "court", "") || nextExtra;
+        let nextExtra = this.Jurisdiction.updateMLZJurisdiction?.(extra, selectedCode, displayValue) ?? extra;
+        nextExtra = this.Jurisdiction.updateMLZExtraField?.(nextExtra, "court", "") ?? nextExtra;
         if (nextExtra === extra && String(item.getField?.("court") || "").trim() === "") return;
         item.setField("extra", nextExtra);
         item.setField("court", "");
@@ -4118,7 +4178,7 @@ ${mlzBlock}` : mlzBlock;
         if (jurisdictionChanged) {
           const extra = String(item.getField?.("extra") || "");
           const displayValue = this.abbrevService.formatJurisdictionDisplay(targetJurisdiction);
-          const updatedExtra = this.Jurisdiction.updateMLZJurisdiction?.(extra, targetJurisdiction, displayValue) || extra;
+          const updatedExtra = this.Jurisdiction.updateMLZJurisdiction?.(extra, targetJurisdiction, displayValue) ?? extra;
           item.setField("extra", updatedExtra);
           const targetOptions = this.abbrevService.listInstitutionPartOptionsForJurisdictionTree(targetJurisdiction);
           if (!targetOptions.length) {
@@ -4457,14 +4517,14 @@ ${mlzBlock}` : mlzBlock;
       const targetNativeType = String(option.nativeType || "").trim();
       const targetCustomType = option.kind === "custom" ? String(option.itemType || "").trim() : "";
       const currentNativeType = this._getItemTypeNameByID(item.itemTypeID);
-      const currentCustomType = String(this.Jurisdiction.getMLZItemType?.(item) || "").trim();
+      const currentCustomType = this._getStoredCustomItemTypeName(item);
       if (currentNativeType === targetNativeType && currentCustomType === targetCustomType) return;
       try {
         if (targetNativeType && currentNativeType !== targetNativeType) {
           await this._setNativeItemType(item, targetNativeType);
         }
         const extra = String(item.getField?.("extra") || "");
-        const nextExtra = this.Jurisdiction.updateMLZItemType?.(extra, targetCustomType) || extra;
+        const nextExtra = this.Jurisdiction.updateMLZItemType?.(extra, targetCustomType) ?? extra;
         if (nextExtra !== extra) {
           item.setField("extra", nextExtra);
         }
@@ -5012,7 +5072,7 @@ ${mlzBlock}` : mlzBlock;
       if (fieldName === "jurisdiction") {
         const normalized = this._normalizeJurisdictionValue(value);
         const displayValue = this.abbrevService.formatJurisdictionDisplay(normalized);
-        nextExtra = this.Jurisdiction.updateMLZJurisdiction?.(extra, normalized, displayValue) || extra;
+        nextExtra = this.Jurisdiction.updateMLZJurisdiction?.(extra, normalized, displayValue) ?? extra;
         if (nativeFieldName) {
           item.setField(nativeFieldName, normalized);
           changed = true;
@@ -5022,7 +5082,7 @@ ${mlzBlock}` : mlzBlock;
           item.setField(nativeFieldName, value);
           changed = true;
         }
-        nextExtra = this.Jurisdiction.updateMLZExtraField?.(nextExtra, fieldName, value) || nextExtra;
+        nextExtra = this.Jurisdiction.updateMLZExtraField?.(nextExtra, fieldName, value) ?? nextExtra;
       }
       if (nextExtra !== extra) {
         item.setField("extra", nextExtra);
@@ -5215,7 +5275,23 @@ ${mlzBlock}` : mlzBlock;
     }
     _sanitizeCSLControlFields(cslItem) {
       if (!cslItem || typeof cslItem !== "object") return;
-      const sanitizedNote = this._stripEmbeddedControlText(cslItem.note);
+      const rawNote = cslItem.note;
+      const parsed = this.Jurisdiction?._getMLZPayloadAndRange?.(rawNote) || null;
+      const sanitizedNote = this._stripEmbeddedControlText(rawNote);
+      try {
+        const payload = {
+          type: cslItem?.type ?? null,
+          title: cslItem?.title ?? null,
+          rawNote: rawNote ?? null,
+          mlzStart: parsed?.start ?? null,
+          mlzEnd: parsed?.end ?? null,
+          sanitizedNote: sanitizedNote ?? null
+        };
+        const msg = `[IndigoBook CSL-M] sanitize note: ${JSON.stringify(payload)}`;
+        Zotero.debug(msg);
+        Zotero.logError(msg);
+      } catch (e) {
+      }
       if (sanitizedNote == null) {
         delete cslItem.note;
       } else {
@@ -5227,7 +5303,10 @@ ${mlzBlock}` : mlzBlock;
       if (!text.trim()) return null;
       const parsed = this.Jurisdiction?._getMLZPayloadAndRange?.(text);
       if (parsed?.start != null && parsed?.end != null) {
-        text = this.Jurisdiction._removeMLZBlock?.(text, parsed.start, parsed.end) || text;
+        const stripped = this.Jurisdiction._removeMLZBlock?.(text, parsed.start, parsed.end);
+        if (stripped != null) {
+          text = stripped;
+        }
       }
       text = text.replace(/\b(container-title-short|title-short|hereinafter)\s*:\s*.*$/i, "");
       text = text.replace(/^[\s"'`]+|[\s"'`]+$/g, "").trim();
@@ -5751,6 +5830,8 @@ ${mlzBlock}` : mlzBlock;
           authority: cslItem?.authority ?? null,
           recipient: Array.isArray(cslItem?.recipient) ? cslItem.recipient : [],
           note: cslItem?.note ?? null,
+          version: cslItem?.version ?? null,
+          edition: cslItem?.edition ?? null,
           "container-title": cslItem?.["container-title"] ?? null,
           "container-title-short": cslItem?.["container-title-short"] ?? null,
           "title-short": cslItem?.["title-short"] ?? null,
