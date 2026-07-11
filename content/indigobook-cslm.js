@@ -5358,7 +5358,7 @@ ${mlzBlock}` : mlzBlock;
           }
         }
         if (!cslItem["title-short"] && cslItem.title) {
-          const hit = this.abbrevService.lookupForCiteProc("title", cslItem.title, jur, { noHints: false });
+          const hit = this.abbrevService.lookupForCiteProc("title", cslItem.title, jur, { noHints: true });
           if (hit?.value) {
             cslItem["title-short"] = this.abbrevService.parseDirective(hit.value).value;
             this._logShortForm("title", cslItem.title, cslItem["title-short"], "hit");
