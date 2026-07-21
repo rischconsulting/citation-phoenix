@@ -2256,6 +2256,8 @@ ${mlzBlock}` : mlzBlock;
       this._registeredSchemaRowIDs = [];
       this._syncInFlight = /* @__PURE__ */ new Set();
       this._journalAbbrByContainerTitleKey = /* @__PURE__ */ new Map();
+      this._containerTitleShortByKey = /* @__PURE__ */ new Map();
+      this._containerTitleContextByKey = /* @__PURE__ */ new Map();
     }
     patch() {
       this._patchCreatorTypes();
@@ -2277,6 +2279,8 @@ ${mlzBlock}` : mlzBlock;
       this._unpatchInfoBoxRender();
       this._unpatchItemPaneRender();
       this._journalAbbrByContainerTitleKey.clear();
+      this._containerTitleShortByKey.clear();
+      this._containerTitleContextByKey.clear();
       const sysProto = Zotero?.Cite?.System?.prototype;
       if (sysProto) {
         if (this._orig.retrieveItem) sysProto.retrieveItem = this._orig.retrieveItem;
@@ -5206,6 +5210,7 @@ ${mlzBlock}` : mlzBlock;
         this._applySchemaCreatorMappings(cslItem, zotItem);
         this._applySchemaCSLFieldMappings(cslItem, zotItem, mlzFields);
         this._applySchemaCSLDateMappings(cslItem, zotItem, mlzFields);
+        this._rememberContainerTitleContext(cslItem, zotItem);
         const seeAlso = this._collectSeeAlsoURIs(cslItem, zotItem);
         if (seeAlso.length) {
           cslItem.seeAlso = seeAlso;
@@ -5346,12 +5351,56 @@ ${mlzBlock}` : mlzBlock;
         family: String(person?.lastName || "").trim()
       };
     }
+    _rememberContainerTitleContext(cslItem, zotItem = null) {
+      const containerTitle = String(cslItem?.["container-title"] || "").trim();
+      if (!containerTitle) return;
+      const key = this.abbrevService.normalizeKey(containerTitle);
+      if (!key) return;
+      const shortTitle = String(cslItem?.["container-title-short"] || "").trim();
+      if (shortTitle) {
+        this._containerTitleShortByKey.set(key, shortTitle);
+      }
+      const type = String(cslItem?.type || "").trim();
+      const language = String(
+        cslItem?.language || zotItem?.getField?.("language") || zotItem?.getField?.("languageCode") || zotItem?.language || ""
+      ).trim();
+      const prior = this._containerTitleContextByKey.get(key) || {
+        journal: false,
+        englishBook: false
+      };
+      if (["article-journal", "article-magazine", "article-newspaper"].includes(type)) {
+        prior.journal = true;
+      }
+      if (type === "chapter" && this._isEnglishLanguage(language)) {
+        prior.englishBook = true;
+      }
+      this._containerTitleContextByKey.set(key, prior);
+    }
+    _shouldAllowContainerTitleFallback(containerTitle) {
+      const key = this.abbrevService.normalizeKey(containerTitle || "");
+      if (!key) return false;
+      const context = this._containerTitleContextByKey.get(key);
+      return !!(context?.journal || context?.englishBook);
+    }
+    _isEnglishLanguage(language) {
+      const value = String(language || "").trim().toLowerCase();
+      return value === "en" || value.startsWith("en-") || value.startsWith("eng");
+    }
+    _protectAbbreviationValue(value) {
+      const text = String(value || "").trim();
+      if (!text || /<span\s+class=["']nocase["']>/i.test(text)) return text;
+      return `<span class="nocase">${this._escapeNoCaseText(text)}</span>`;
+    }
+    _escapeNoCaseText(value) {
+      return String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
     _decorateShortForms(cslItem, jur) {
       try {
         if (!cslItem["container-title-short"] && cslItem["container-title"]) {
-          const hit = this.abbrevService.lookupForCiteProc("container-title", cslItem["container-title"], jur, { noHints: false });
+          const allowFallback = this._shouldAllowContainerTitleFallback(cslItem["container-title"]);
+          const hit = this.abbrevService.lookupForCiteProc("container-title", cslItem["container-title"], jur, { noHints: !allowFallback });
           if (hit?.value) {
-            cslItem["container-title-short"] = this.abbrevService.parseDirective(hit.value).value;
+            cslItem["container-title-short"] = this._protectAbbreviationValue(this.abbrevService.parseDirective(hit.value).value);
             this._logShortForm("container-title", cslItem["container-title"], cslItem["container-title-short"], "hit");
           } else {
             this._logShortForm("container-title", cslItem["container-title"], null, "miss");
@@ -5360,12 +5409,13 @@ ${mlzBlock}` : mlzBlock;
         if (!cslItem["title-short"] && cslItem.title) {
           const hit = this.abbrevService.lookupForCiteProc("title", cslItem.title, jur, { noHints: true });
           if (hit?.value) {
-            cslItem["title-short"] = this.abbrevService.parseDirective(hit.value).value;
+            cslItem["title-short"] = this._protectAbbreviationValue(this.abbrevService.parseDirective(hit.value).value);
             this._logShortForm("title", cslItem.title, cslItem["title-short"], "hit");
           } else {
             this._logShortForm("title", cslItem.title, null, "miss");
           }
         }
+        this._rememberContainerTitleContext(cslItem);
       } catch (e) {
         this._warnRetrieveItem(`decorateShortForms failed: ${String(e)}`);
       }
@@ -5464,23 +5514,32 @@ ${mlzBlock}` : mlzBlock;
           const jur = (jurisdiction || origJurisdiction || "default").toLowerCase();
           if (category === "container-title") {
             const normalizedContainerTitle = self.abbrevService.normalizeKey(key);
+            const storedShort = self._containerTitleShortByKey.get(normalizedContainerTitle);
+            if (storedShort) {
+              if (!obj[jur]) obj[jur] = self._newAbbreviationSegments(this);
+              if (!obj[jur][category]) obj[jur][category] = {};
+              obj[jur][category][key] = self._protectAbbreviationValue(storedShort);
+              self._logRenderProbeFromAbbreviation(category, key, jur, noHints, "container-title-short");
+              self._logAbbreviation(category, key, jur, obj[jur][category][key], "container-title-short");
+              return jur;
+            }
             const journalAbbr = self._journalAbbrByContainerTitleKey.get(normalizedContainerTitle);
             if (journalAbbr) {
               if (!obj[jur]) obj[jur] = self._newAbbreviationSegments(this);
               if (!obj[jur][category]) obj[jur][category] = {};
-              obj[jur][category][key] = journalAbbr;
+              obj[jur][category][key] = self._protectAbbreviationValue(journalAbbr);
               self._logRenderProbeFromAbbreviation(category, key, jur, noHints, "journal-abbr");
               self._logAbbreviation(category, key, jur, journalAbbr, "journal-abbr");
               return jur;
             }
           }
-          const lookupNoHints = category === "title" ? true : noHints;
+          const lookupNoHints = category === "title" ? true : category === "container-title" ? !self._shouldAllowContainerTitleFallback(key) : noHints;
           const hit = self.abbrevService.lookupForCiteProc(category, key, jur, { noHints: lookupNoHints });
           if (hit?.value) {
             const targetJur = hit.jurisdiction || jur || "default";
             if (!obj[targetJur]) obj[targetJur] = self._newAbbreviationSegments(this);
             if (!obj[targetJur][category]) obj[targetJur][category] = {};
-            obj[targetJur][category][key] = hit.value;
+            obj[targetJur][category][key] = category === "title" || category === "container-title" ? self._protectAbbreviationValue(hit.value) : hit.value;
             self._logRenderProbeFromAbbreviation(category, key, targetJur, noHints, "hit");
             self._logAbbreviation(category, key, targetJur, obj[targetJur][category][key], "hit");
             return targetJur;
