@@ -5474,7 +5474,8 @@ ${mlzBlock}` : mlzBlock;
               return jur;
             }
           }
-          const hit = self.abbrevService.lookupForCiteProc(category, key, jur, { noHints });
+          const lookupNoHints = category === "title" ? true : noHints;
+          const hit = self.abbrevService.lookupForCiteProc(category, key, jur, { noHints: lookupNoHints });
           if (hit?.value) {
             const targetJur = hit.jurisdiction || jur || "default";
             if (!obj[targetJur]) obj[targetJur] = self._newAbbreviationSegments(this);

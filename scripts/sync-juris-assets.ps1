@@ -352,7 +352,7 @@ function Update-AbbrevDirectoryListing {
 
     if (Test-Path -LiteralPath $listingPath) {
         try {
-            $existing = Get-Content -LiteralPath $listingPath -Raw | ConvertFrom-Json
+            $existing = Get-Content -LiteralPath $listingPath -Raw -Encoding UTF8 | ConvertFrom-Json
             foreach ($item in @($existing)) {
                 $filename = ([string]$item.filename).Trim()
                 if (-not $filename) { continue }
@@ -383,7 +383,7 @@ function Update-AbbrevDirectoryListing {
     }
 
     $payload = $entries | ConvertTo-Json -Depth 4
-    Set-Content -LiteralPath $listingPath -Value $payload -Encoding utf8
+    [System.IO.File]::WriteAllText($listingPath, $payload + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false))
     Write-Host 'Rebuilt juris-abbrevs/DIRECTORY_LISTING.json' -ForegroundColor Cyan
 }
 
@@ -408,7 +408,7 @@ function Get-MapDisplayName {
     )
 
     try {
-        $data = Get-Content -LiteralPath $FilePath -Raw | ConvertFrom-Json
+        $data = Get-Content -LiteralPath $FilePath -Raw -Encoding UTF8 | ConvertFrom-Json
         $name = [string]$data.name
         if (-not [string]::IsNullOrWhiteSpace($name)) {
             return $name.Trim()
@@ -446,7 +446,7 @@ function Update-JurisMapDirectoryListing {
 
     if (Test-Path -LiteralPath $listingPath) {
         try {
-            $existing = Get-Content -LiteralPath $listingPath -Raw | ConvertFrom-Json
+            $existing = Get-Content -LiteralPath $listingPath -Raw -Encoding UTF8 | ConvertFrom-Json
             foreach ($item in @($existing)) {
                 $filename = ([string]$item.filename).Trim()
                 if (-not $filename) { continue }
@@ -483,7 +483,7 @@ function Update-JurisMapDirectoryListing {
     }
 
     $payload = $entries | ConvertTo-Json -Depth 4
-    Set-Content -LiteralPath $listingPath -Value $payload -Encoding utf8
+    [System.IO.File]::WriteAllText($listingPath, $payload + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false))
     Write-Host 'Rebuilt juris-maps/DIRECTORY_LISTING.json' -ForegroundColor Cyan
 }
 
