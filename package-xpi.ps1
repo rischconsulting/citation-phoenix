@@ -25,6 +25,12 @@ function Update-JsonIndex {
     [System.IO.File]::WriteAllText($IndexPath, $json, [System.Text.UTF8Encoding]::new($false))
 }
 
+$syncScript = Join-Path -Path $PSScriptRoot -ChildPath 'scripts\sync-juris-assets.ps1'
+Write-Host "Syncing Juris-M assets..." -ForegroundColor Cyan
+& $syncScript
+if ($LASTEXITCODE -ne 0) { throw "sync-juris-assets.ps1 failed with exit code $LASTEXITCODE" }
+Write-Host "Juris-M asset sync complete." -ForegroundColor Cyan
+
 # Keep bundled style indices aligned with source assets.
 Update-JsonIndex `
     -DirectoryPath (Join-Path -Path $PSScriptRoot -ChildPath 'styles') `
