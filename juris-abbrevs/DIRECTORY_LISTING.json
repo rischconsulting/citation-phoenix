@@ -164,6 +164,10 @@
     "name": "Abbreviations: Rep. of the Congo legal"
   },
   {
+    "filename": "auto-ch-fr.json",
+    "name": "auto-ch-fr.json"
+  },
+  {
     "filename": "auto-ch.json",
     "name": "Abbreviations: Switzerland legal"
   },
@@ -316,6 +320,10 @@
     "name": "Abbreviations: Western Sahara legal"
   },
   {
+    "filename": "auto-eporg.int.json",
+    "name": "auto-eporg.int.json"
+  },
+  {
     "filename": "auto-er.json",
     "name": "Abbreviations: Eritrea legal"
   },
@@ -338,6 +346,10 @@
   {
     "filename": "auto-eu.int-de.json",
     "name": "auto-eu.int-de.json"
+  },
+  {
+    "filename": "auto-eu.int-se.json",
+    "name": "auto-eu.int-se.json"
   },
   {
     "filename": "auto-eu.int.json",

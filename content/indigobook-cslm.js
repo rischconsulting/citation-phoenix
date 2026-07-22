@@ -209,12 +209,21 @@ ${mlzBlock}` : mlzBlock;
       const payload = parsed.payload || {};
       const targetFields = this._ensureMLZFieldObject(payload);
       const value = fieldValue == null ? "" : String(fieldValue).trim();
-      if (value) targetFields[field] = value;
-      else delete targetFields[field];
+      if (value) {
+        targetFields[field] = value;
+        if (targetFields !== payload) delete payload[field];
+      } else {
+        delete targetFields[field];
+        if (payload.extrafields && typeof payload.extrafields === "object" && !Array.isArray(payload.extrafields)) {
+          delete payload.extrafields[field];
+        }
+        delete payload[field];
+      }
       this._cleanupEmptyMLZFieldObject(payload);
       const hasExtraFields = this._hasMLZFields(payload);
       const hasExtraCreators = Array.isArray(payload.extracreators) && payload.extracreators.length;
-      if (!hasExtraFields && !hasExtraCreators) {
+      const hasControlSections = this._hasMLZControlSections(payload);
+      if (!hasExtraFields && !hasExtraCreators && !hasControlSections) {
         if (parsed.start != null && parsed.end != null) {
           return this._removeMLZBlock(extra, parsed.start, parsed.end);
         }

@@ -1,11 +1,182 @@
 {
   "filename": "auto-br.json",
   "name": "Brazil",
-  "version": "2026-07-08 20:45:38 UTC",
+  "version": "2026-07-22 20:44:51 UTC",
   "xdata": {
     "default": {
       "place": {
-        "BR": "Brazil"
+        "BR": "Brazil",
+        "BR:AC": "AC",
+        "BR:AL": "AL",
+        "BR:AP": "AP",
+        "BR:AM": "AM",
+        "BR:BA": "BA",
+        "BR:CE": "CE",
+        "BR:ES": "ES",
+        "BR:GO": "GO",
+        "BR:MA": "MA",
+        "BR:MT": "MT",
+        "BR:MS": "MS",
+        "BR:MG": "MG",
+        "BR:PA": "PA",
+        "BR:PB": "PB",
+        "BR:PR": "PR",
+        "BR:PE": "PE",
+        "BR:PI": "PI",
+        "BR:RJ": "RJ",
+        "BR:RN": "RN",
+        "BR:RS": "RS",
+        "BR:RO": "RO",
+        "BR:RR": "RR",
+        "BR:SC": "SC",
+        "BR:SP": "SP",
+        "BR:SE": "SE",
+        "BR:TO": "TO",
+        "BR:DF": "DF"
+      }
+    },
+    "br": {
+      "institution-part": {
+        "stf": "STF",
+        "stj": "STJ",
+        "tse": "TSE",
+        "tst": "TST",
+        "stm": "STM"
+      }
+    },
+    "br:ac": {
+      "institution-part": {
+        "court.appeal": "TJ-AC"
+      }
+    },
+    "br:al": {
+      "institution-part": {
+        "court.appeal": "TJ-AL"
+      }
+    },
+    "br:ap": {
+      "institution-part": {
+        "court.appeal": "TJ-AP"
+      }
+    },
+    "br:am": {
+      "institution-part": {
+        "court.appeal": "TJ-AM"
+      }
+    },
+    "br:ba": {
+      "institution-part": {
+        "court.appeal": "TJ-BA"
+      }
+    },
+    "br:ce": {
+      "institution-part": {
+        "court.appeal": "TJ-CE"
+      }
+    },
+    "br:es": {
+      "institution-part": {
+        "court.appeal": "TJ-ES"
+      }
+    },
+    "br:go": {
+      "institution-part": {
+        "court.appeal": "TJ-GO"
+      }
+    },
+    "br:ma": {
+      "institution-part": {
+        "court.appeal": "TJ-MA"
+      }
+    },
+    "br:mt": {
+      "institution-part": {
+        "court.appeal": "TJ-MT"
+      }
+    },
+    "br:ms": {
+      "institution-part": {
+        "court.appeal": "TJ-MS"
+      }
+    },
+    "br:mg": {
+      "institution-part": {
+        "court.appeal": "TJ-MG"
+      }
+    },
+    "br:pa": {
+      "institution-part": {
+        "court.appeal": "TJ-PA"
+      }
+    },
+    "br:pb": {
+      "institution-part": {
+        "court.appeal": "TJ-PB"
+      }
+    },
+    "br:pr": {
+      "institution-part": {
+        "court.appeal": "TJ-PR"
+      }
+    },
+    "br:pe": {
+      "institution-part": {
+        "court.appeal": "TJ-PE"
+      }
+    },
+    "br:pi": {
+      "institution-part": {
+        "court.appeal": "TJ-PI"
+      }
+    },
+    "br:rj": {
+      "institution-part": {
+        "court.appeal": "TJ-RJ"
+      }
+    },
+    "br:rn": {
+      "institution-part": {
+        "court.appeal": "TJ-RN"
+      }
+    },
+    "br:rs": {
+      "institution-part": {
+        "court.appeal": "TJ-RS"
+      }
+    },
+    "br:ro": {
+      "institution-part": {
+        "court.appeal": "TJ-RO"
+      }
+    },
+    "br:rr": {
+      "institution-part": {
+        "court.appeal": "TJ-RR"
+      }
+    },
+    "br:sc": {
+      "institution-part": {
+        "court.appeal": "TJ-SC"
+      }
+    },
+    "br:sp": {
+      "institution-part": {
+        "court.appeal": "TJ-SP"
+      }
+    },
+    "br:se": {
+      "institution-part": {
+        "court.appeal": "TJ-SE"
+      }
+    },
+    "br:to": {
+      "institution-part": {
+        "court.appeal": "TJ-TO"
+      }
+    },
+    "br:df": {
+      "institution-part": {
+        "court.appeal": "TJ-DF"
       }
     }
   }

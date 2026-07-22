@@ -1,12 +1,12 @@
 {
   "filename": "auto-at-enIBFD.json",
   "name": "Austria",
-  "version": "2026-07-08 20:45:38 UTC",
+  "version": "2026-07-22 20:44:51 UTC",
   "xdata": {
     "default": {
       "place": {
         "AT": "Austria",
-        "AT:BURGENLAND": "Burgenland",
+        "AT:BURGENLAND": "Bgld",
         "AT:GRAZ": "Graz",
         "AT:GRAZ:GRAZ": "Graz",
         "AT:GRAZ:GRAZ:DEUTSCHLANDSBERG": "Deutschlandsberg",
@@ -58,7 +58,7 @@
         "AT:INNSBRUCK:INNSBRUCK:SILZ": "Silz",
         "AT:INNSBRUCK:INNSBRUCK:TELFS": "Telfs",
         "AT:INNSBRUCK:INNSBRUCK:ZELL.AM.ZILLER": "Zell am Ziller",
-        "AT:KARNTEN": "Kärnten",
+        "AT:KARNTEN": "Krnt",
         "AT:LINZ": "Linz",
         "AT:LINZ:LINZ": "Linz",
         "AT:LINZ:LINZ:FREISTADT": "Freistadt",
@@ -91,12 +91,12 @@
         "AT:LINZ:WELS:GRIESKIRCHEN": "Grieskirchen",
         "AT:LINZ:WELS:VOCKLABRUCK": "Vöcklabruck",
         "AT:LINZ:WELS:WELS": "Wels",
-        "AT:NIEDEROSTERREICH": "Niederösterreich",
-        "AT:OBEROSTERREICH": "Oberösterreich",
-        "AT:SALZBURG": "Salzburg",
-        "AT:STEIERMARK": "Steiermark",
-        "AT:TIROL": "Tirol",
-        "AT:VORARLBERG": "Vorarlberg",
+        "AT:NIEDEROSTERREICH": "NÖ",
+        "AT:OBEROSTERREICH": "OÖ",
+        "AT:SALZBURG": "Sbg",
+        "AT:STEIERMARK": "Stmk",
+        "AT:TIROL": "Tir",
+        "AT:VORARLBERG": "Vlbg",
         "AT:WIEN": "Wien",
         "AT:WIEN:EISENSTADT": "Eisenstadt",
         "AT:WIEN:EISENSTADT:EISENSTADT": "Eisenstadt",
@@ -155,6 +155,7 @@
         "bfg": "BFG [Federal Tax Court]",
         "bvwg": "BVwG [Federal Administrative Court]",
         "ogh": "OGH [Supreme Court]",
+        "risjustiz": "OGH [Supreme Court], RIS-Justiz",
         "vfgh": "VfGH [Constitutional Court]",
         "vwgh": "VwGH [Supreme Administrative Court]",
         "asylgh": "Asylgerichtshof",
@@ -170,6 +171,7 @@
         "bfg": "BFG",
         "bvwg": "BVwG",
         "ogh": "OGH",
+        "risjustiz": "RIS-Justiz",
         "vfgh": "VfGH",
         "vwgh": "VwGH",
         "asylgh": "AsylGH",
@@ -184,12 +186,12 @@
     },
     "at:burgenland": {
       "institution-part": {
-        "lvwg": "LVwG Burgenland [Regional Administrative Court]",
-        "uvs": "UVS Burgenland [Independent Administrative Senate]"
+        "lvwg": "LVwG Bgld [Regional Administrative Court]",
+        "uvs": "UVS Bgld [Independent Administrative Senate]"
       },
       "institution-entire": {
-        "lvwg": "LVwG Burgenland",
-        "uvs": "UVS Burgenland"
+        "lvwg": "LVwG Bgld",
+        "uvs": "UVS Bgld"
       }
     },
     "at:graz": {
@@ -604,12 +606,12 @@
     },
     "at:karnten": {
       "institution-part": {
-        "lvwg": "LVwG Kärnten [Regional Administrative Court]",
-        "uvs": "UVS Kärnten [Independent Administrative Senate]"
+        "lvwg": "LVwG Krnt [Regional Administrative Court]",
+        "uvs": "UVS Krnt [Independent Administrative Senate]"
       },
       "institution-entire": {
-        "lvwg": "LVwG Kärnten",
-        "uvs": "UVS Kärnten"
+        "lvwg": "LVwG Krnt",
+        "uvs": "UVS Krnt"
       }
     },
     "at:linz": {
@@ -870,73 +872,73 @@
     },
     "at:niederosterreich": {
       "institution-part": {
-        "lvwg": "LVwG Niederösterreich [Regional Administrative Court]",
-        "uvs": "UVS Niederösterreich [Independent Administrative Senate]"
+        "lvwg": "LVwG NÖ [Regional Administrative Court]",
+        "uvs": "UVS NÖ [Independent Administrative Senate]"
       },
       "institution-entire": {
-        "lvwg": "LVwG Niederösterreich",
-        "uvs": "UVS Niederösterreich"
+        "lvwg": "LVwG NÖ",
+        "uvs": "UVS NÖ"
       }
     },
     "at:oberosterreich": {
       "institution-part": {
-        "lvwg": "LVwG Oberösterreich [Regional Administrative Court]",
-        "uvs": "UVS Oberösterreich [Independent Administrative Senate]"
+        "lvwg": "LVwG OÖ [Regional Administrative Court]",
+        "uvs": "UVS OÖ [Independent Administrative Senate]"
       },
       "institution-entire": {
-        "lvwg": "LVwG Oberösterreich",
-        "uvs": "UVS Oberösterreich"
+        "lvwg": "LVwG OÖ",
+        "uvs": "UVS OÖ"
       }
     },
     "at:salzburg": {
       "institution-part": {
-        "lvwg": "LVwG Salzburg [Regional Administrative Court]",
-        "uvs": "UVS Salzburg [Independent Administrative Senate]"
+        "lvwg": "LVwG Sbg [Regional Administrative Court]",
+        "uvs": "UVS Sbg [Independent Administrative Senate]"
       },
       "institution-entire": {
-        "lvwg": "LVwG Salzburg",
-        "uvs": "UVS Salzburg"
+        "lvwg": "LVwG Sbg",
+        "uvs": "UVS Sbg"
       }
     },
     "at:steiermark": {
       "institution-part": {
-        "lvwg": "LVwG Steiermark [Regional Administrative Court]",
-        "uvs": "UVS Steiermark [Independent Administrative Senate]"
+        "lvwg": "LVwG Stmk [Regional Administrative Court]",
+        "uvs": "UVS Stmk [Independent Administrative Senate]"
       },
       "institution-entire": {
-        "lvwg": "LVwG Steiermark",
-        "uvs": "UVS Steiermark"
+        "lvwg": "LVwG Stmk",
+        "uvs": "UVS Stmk"
       }
     },
     "at:tirol": {
       "institution-part": {
-        "lvwg": "LVwG Tirol [Regional Administrative Court]",
-        "uvs": "UVS Tirol [Independent Administrative Senate]"
+        "lvwg": "LVwG Tir [Regional Administrative Court]",
+        "uvs": "UVS Tir [Independent Administrative Senate]"
       },
       "institution-entire": {
-        "lvwg": "LVwG Tirol",
-        "uvs": "UVS Tirol"
+        "lvwg": "LVwG Tir",
+        "uvs": "UVS Tir"
       }
     },
     "at:vorarlberg": {
       "institution-part": {
-        "lvwg": "LVwG Vorarlberg [Regional Administrative Court]",
-        "uvs": "UVS Vorarlberg [Independent Administrative Senate]"
+        "lvwg": "LVwG Vlbg [Regional Administrative Court]",
+        "uvs": "UVS Vlbg [Independent Administrative Senate]"
       },
       "institution-entire": {
-        "lvwg": "LVwG Vorarlberg",
-        "uvs": "UVS Vorarlberg"
+        "lvwg": "LVwG Vlbg",
+        "uvs": "UVS Vlbg"
       }
     },
     "at:wien": {
       "institution-part": {
         "olg": "OLG Wien [Higher Regional Court]",
-        "vgw": "VGW [Regional Administrative Court]",
+        "vgw": "LVwG Wien [Regional Administrative Court]",
         "uvs": "UVS Wien [Independent Administrative Senate]"
       },
       "institution-entire": {
         "olg": "OLG Wien",
-        "vgw": "VGW",
+        "vgw": "LVwG Wien",
         "uvs": "UVS Wien"
       }
     },

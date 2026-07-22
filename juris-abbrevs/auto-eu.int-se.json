@@ -1,0 +1,36 @@
+{
+  "filename": "auto-eu.int-se.json",
+  "name": "European Union",
+  "version": "2026-07-22 20:44:52 UTC",
+  "xdata": {
+    "default": {
+      "place": {
+        "EU.INT": "European Union",
+        "EU.INT:CJEU": "Court of Justice",
+        "EU.INT:ENCJ": "European Network of Councils for the Judiciary"
+      }
+    },
+    "eu.int": {
+      "institution-part": {
+        "ec": "Europeiska kommisionen"
+      }
+    },
+    "eu.int:cjeu": {
+      "institution-part": {
+        "ag": "GA",
+        "ecj": "ECJ",
+        "ecj~chamber.1": "Första avdelningen",
+        "ecj~chamber.2": "Andra avdelningen",
+        "ecj~chamber.3": "Trejde avdelningen",
+        "ecj~chamber.4": "Fjärde avdelningen",
+        "ecj~chamber.5": "Femte avdelningen",
+        "ecj~chamber.6": "Sjätte avdelningen",
+        "ecj~chamber.7": "Sjunde avdelningen",
+        "ecj~chamber.8": "Åttonde avdelningen",
+        "ecj~chamber.9": "Nionde avdelningen",
+        "egc": "EGC",
+        "cst": "Personaldomstolen"
+      }
+    }
+  }
+}

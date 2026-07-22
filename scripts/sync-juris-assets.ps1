@@ -1,7 +1,8 @@
 param(
-    [string]$SourceCacheRoot = (Join-Path $PSScriptRoot '..\juris-source-cache'),
+    [string]$SourceCacheRoot = (Join-Path $env:LOCALAPPDATA 'indigo-phoenix\juris-source-cache'),
     [string]$DestinationRoot = (Join-Path $PSScriptRoot '..'),
     [bool]$UpdateSourceCheckout = $true,
+    # Deprecated: conflicts now always back up the local file and overwrite it with upstream.
     [bool]$PreferCanonicalGenerated = $true
 )
 
@@ -38,8 +39,10 @@ $lrrBuildMapRoot = Join-Path $lrrBuildRoot 'juris-maps'
 $lrrBuildAbbrevRoot = Join-Path $lrrBuildRoot 'juris-abbrevs'
 $mlzAbbrevCheckoutPath = Join-Path $cacheRoot 'mlz-abbreviations'
 $syncReportPath = Join-Path $repoRoot 'scripts\sync-juris-assets-report.json'
-$syncBackupRoot = Join-Path $repoRoot 'scripts\sync-juris-assets-backup'
+$syncStartedAt = Get-Date
+$syncBackupRoot = Join-Path $repoRoot ('scripts\sync-juris-assets-backup\{0}' -f $syncStartedAt.ToString('yyyyMMdd-HHmmss'))
 $syncConflicts = [System.Collections.Generic.List[object]]::new()
+$syncDateOnlyUpdates = [System.Collections.Generic.List[object]]::new()
 
 function Get-GitCommand {
     $git = Get-Command git -ErrorAction SilentlyContinue
@@ -154,13 +157,55 @@ function Get-RelativeFiles {
     return @($relativeFiles)
 }
 
+function Normalize-GeneratedDateMetadata {
+    param(
+        [string]$Path,
+        [string]$RelativePath
+    )
+
+    $extension = [System.IO.Path]::GetExtension($RelativePath).ToLowerInvariant()
+    $text = [System.IO.File]::ReadAllText($Path, [System.Text.Encoding]::UTF8)
+
+    if ($extension -eq '.json') {
+        return $text `
+            -replace '("timestamp"\s*:\s*")[^"]*(")', '$1__SYNC_DATE__$2' `
+            -replace '("version"\s*:\s*")\d{4}-\d{2}-\d{2}[^"]*(")', '$1__SYNC_DATE__$2'
+    }
+
+    if ($extension -eq '.csl') {
+        return $text -replace '(<updated>)[^<]*(</updated>)', '$1__SYNC_DATE__$2'
+    }
+
+    return $text
+}
+
+function Test-OnlyGeneratedDateMetadataChanged {
+    param(
+        [string]$SourcePath,
+        [string]$DestinationPath,
+        [string]$RelativePath
+    )
+
+    $extension = [System.IO.Path]::GetExtension($RelativePath).ToLowerInvariant()
+    if ($extension -ne '.json' -and $extension -ne '.csl') {
+        return $false
+    }
+
+    try {
+        $sourceNormalized = Normalize-GeneratedDateMetadata -Path $SourcePath -RelativePath $RelativePath
+        $destinationNormalized = Normalize-GeneratedDateMetadata -Path $DestinationPath -RelativePath $RelativePath
+        return $sourceNormalized -eq $destinationNormalized
+    } catch {
+        return $false
+    }
+}
+
 function Sync-ManagedFiles {
     param(
         [string]$Label,
         [string]$SourcePath,
         [string]$DestinationPath,
-        [string[]]$Include,
-        [bool]$PreferSourceOnConflict = $false
+        [string[]]$Include
     )
 
     Ensure-Directory -Path $DestinationPath
@@ -195,34 +240,35 @@ function Sync-ManagedFiles {
             continue
         }
 
-        if ($PreferSourceOnConflict) {
-            $backupPath = Join-Path $syncBackupRoot $Label
-            $backupPath = Join-Path $backupPath $relative
-            $backupDir = Split-Path -Path $backupPath -Parent
-            Ensure-Directory -Path $backupDir
-            Copy-Item -LiteralPath $toPath -Destination $backupPath -Force
+        if (Test-OnlyGeneratedDateMetadataChanged -SourcePath $fromPath -DestinationPath $toPath -RelativePath $relative) {
             Copy-Item -LiteralPath $fromPath -Destination $toPath -Force
-
-            $script:syncConflicts.Add([ordered]@{
+            $script:syncDateOnlyUpdates.Add([ordered]@{
                 label = $Label
                 relativePath = $relative
-                resolution = 'replaced-with-upstream'
+                resolution = 'date-metadata-only'
                 destinationPath = $toPath
                 sourcePath = $fromPath
-                backupPath = $backupPath
             }) | Out-Null
-            Write-Warning "Replaced existing $Label/$relative with upstream version; backup saved to $backupPath"
+            Write-Host "Updated generated date metadata only for $Label/$relative" -ForegroundColor DarkGray
             continue
         }
+
+        $backupPath = Join-Path $syncBackupRoot $Label
+        $backupPath = Join-Path $backupPath $relative
+        $backupDir = Split-Path -Path $backupPath -Parent
+        Ensure-Directory -Path $backupDir
+        Copy-Item -LiteralPath $toPath -Destination $backupPath -Force
+        Copy-Item -LiteralPath $fromPath -Destination $toPath -Force
 
         $script:syncConflicts.Add([ordered]@{
             label = $Label
             relativePath = $relative
-            resolution = 'preserved-local'
+            resolution = 'replaced-with-upstream'
             destinationPath = $toPath
             sourcePath = $fromPath
+            backupPath = $backupPath
         }) | Out-Null
-        Write-Warning "Preserved existing $Label/$relative; upstream version differs at $fromPath"
+        Write-Warning "Replaced existing $Label/$relative with upstream version; backup saved to $backupPath"
     }
 }
 
@@ -230,12 +276,15 @@ function Write-SyncReport {
     if ($script:syncConflicts.Count -eq 0) {
         $payload = [ordered]@{
             generatedAt = (Get-Date).ToString('o')
-            preferCanonicalGenerated = $PreferCanonicalGenerated
+            overwriteLocalOnConflict = $true
+            backupRoot = $syncBackupRoot
             summary = [ordered]@{
                 preservedLocal = 0
                 replacedWithUpstream = 0
+                dateMetadataOnly = $script:syncDateOnlyUpdates.Count
                 total = 0
             }
+            dateMetadataOnly = @($script:syncDateOnlyUpdates)
             conflicts = @()
         } | ConvertTo-Json -Depth 5
 
@@ -243,22 +292,25 @@ function Write-SyncReport {
         return
     }
 
-    $preservedCount = @($script:syncConflicts | Where-Object { $_.resolution -eq 'preserved-local' }).Count
+    $preservedCount = 0
     $replacedCount = @($script:syncConflicts | Where-Object { $_.resolution -eq 'replaced-with-upstream' }).Count
 
     $payload = [ordered]@{
         generatedAt = (Get-Date).ToString('o')
-        preferCanonicalGenerated = $PreferCanonicalGenerated
+        overwriteLocalOnConflict = $true
+        backupRoot = $syncBackupRoot
         summary = [ordered]@{
             preservedLocal = $preservedCount
             replacedWithUpstream = $replacedCount
+            dateMetadataOnly = $script:syncDateOnlyUpdates.Count
             total = $script:syncConflicts.Count
         }
+        dateMetadataOnly = @($script:syncDateOnlyUpdates)
         conflicts = @($script:syncConflicts)
     } | ConvertTo-Json -Depth 5
 
     Set-Content -LiteralPath $syncReportPath -Value $payload -Encoding utf8
-    Write-Warning "Recorded $($script:syncConflicts.Count) upstream differences ($replacedCount replaced, $preservedCount preserved). See $syncReportPath"
+    Write-Warning "Recorded $($script:syncConflicts.Count) upstream differences ($replacedCount replaced, $preservedCount preserved). Continuing; see $syncReportPath"
 }
 
 function Build-LegalResourceRegistryOutputs {
@@ -495,8 +547,8 @@ foreach ($sourceRepo in $sourceRepos) {
 }
 
 Build-LegalResourceRegistryOutputs
-Sync-ManagedFiles -Label 'juris-maps' -SourcePath $lrrBuildMapRoot -DestinationPath (Join-Path $repoRoot 'juris-maps') -Include @('juris-*-map.json', 'versions.json') -PreferSourceOnConflict $PreferCanonicalGenerated
-Sync-ManagedFiles -Label 'juris-abbrevs-auto' -SourcePath $lrrBuildAbbrevRoot -DestinationPath (Join-Path $repoRoot 'juris-abbrevs') -Include @('auto-*.json') -PreferSourceOnConflict $PreferCanonicalGenerated
+Sync-ManagedFiles -Label 'juris-maps' -SourcePath $lrrBuildMapRoot -DestinationPath (Join-Path $repoRoot 'juris-maps') -Include @('juris-*-map.json', 'versions.json')
+Sync-ManagedFiles -Label 'juris-abbrevs-auto' -SourcePath $lrrBuildAbbrevRoot -DestinationPath (Join-Path $repoRoot 'juris-abbrevs') -Include @('auto-*.json')
 
 Ensure-GitCheckout -RepoUrl 'https://github.com/fbennett/mlz-abbreviations.git' -CheckoutPath $mlzAbbrevCheckoutPath -Name 'mlz-abbreviations'
 Sync-ManagedFiles -Label 'juris-abbrevs-static' -SourcePath $mlzAbbrevCheckoutPath -DestinationPath (Join-Path $repoRoot 'juris-abbrevs') -Include @('secondary-*.json', 'abbreviations-empty.json', 'README.md', 'LICENSE')

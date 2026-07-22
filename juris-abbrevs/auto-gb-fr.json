@@ -1,7 +1,7 @@
 {
   "filename": "auto-gb-fr.json",
   "name": "United Kingdom",
-  "version": "2026-07-08 20:45:38 UTC",
+  "version": "2026-07-22 20:44:52 UTC",
   "xdata": {
     "default": {
       "place": {
@@ -97,6 +97,7 @@
         "ewca.crim": "EWCA Crim",
         "ewhc.ch": "EWHC|Ch",
         "ewhc.qb": "EWHC|QB",
+        "ewhc.kb": "EWHC|KB",
         "ewhc.bankruptcy": "High Court|Chancery Division|Bankruptcy and Companies Court",
         "ewhc.masters": "EWHC",
         "ewhc.patent": "EWHC|Pat",
@@ -107,6 +108,7 @@
         "ewhc.mercantile": "High Court|Queen's Bench Division|Mercantile Court",
         "ewhc.tcc": "EWHC|TCC",
         "ewcop": "EWCOP",
+        "ewex": "Ex",
         "kb": "King's Bench"
       }
     },

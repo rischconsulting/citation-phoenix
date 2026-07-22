@@ -97,7 +97,9 @@ $filesToArchive = Get-ChildItem -Path $sourcePath -File -Recurse -Force |
 
         # Exclude VCS dir and output artifacts
         if ($rel -match '^(\.git[\\/]|\.git$)') { return $false }
-        if ($rel -match '^(jurism-zotero[\\/]|_old_versions[\\/])') { return $false }
+        if ($rel -match '(^|[\\/])\.git([\\/]|$)') { return $false }
+        if ($rel -match '^(jurism-zotero[\\/]|juris-source-cache[\\/]|_old_versions[\\/])') { return $false }
+        if ($rel -match '^scripts[\\/]sync-juris-assets-(backup[\\/]|report\.json$)') { return $false }
         if ($rel -ieq $zipName -or $rel -ieq $xpiName) { return $false }
 
         # Exclude script helpers from package

@@ -1,7 +1,7 @@
 {
   "filename": "auto-at.json",
   "name": "Austria",
-  "version": "2026-07-08 20:45:38 UTC",
+  "version": "2026-07-22 20:44:51 UTC",
   "xdata": {
     "default": {
       "place": {
@@ -155,6 +155,7 @@
         "bfg": "Bundesfinanzgericht",
         "bvwg": "Bundesverwaltungsgericht",
         "ogh": "Oberster Gerichtshof",
+        "risjustiz": "RIS-Justiz",
         "vfgh": "VfSlg",
         "vwgh": "VwSlg",
         "asylgh": "Asylgerichtshof",
@@ -170,6 +171,7 @@
         "bfg": "BFG",
         "bvwg": "BVwG",
         "ogh": "OGH",
+        "risjustiz": "RIS-Justiz",
         "vfgh": "VfGH",
         "vwgh": "VwGH",
         "asylgh": "AsylGH",

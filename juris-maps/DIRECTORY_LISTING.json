@@ -256,6 +256,10 @@
     "name": "Western Sahara"
   },
   {
+    "filename": "juris-eporg.int-map.json",
+    "name": "Eporg.Int"
+  },
+  {
     "filename": "juris-er-map.json",
     "name": "Eritrea"
   },
