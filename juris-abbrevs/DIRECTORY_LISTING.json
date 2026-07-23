@@ -89,7 +89,7 @@
   },
   {
     "filename": "auto-be.json",
-    "name": "Abbreviations: BelgiÃ« legal"
+    "name": "Abbreviations: België legal"
   },
   {
     "filename": "auto-bf.json",
@@ -164,12 +164,16 @@
     "name": "Abbreviations: Rep. of the Congo legal"
   },
   {
+    "filename": "auto-ch-fr.json",
+    "name": "auto-ch-fr.json"
+  },
+  {
     "filename": "auto-ch.json",
     "name": "Abbreviations: Switzerland legal"
   },
   {
     "filename": "auto-ci.json",
-    "name": "Abbreviations: CÃ´te d'Ivoire legal"
+    "name": "Abbreviations: Côte d'Ivoire legal"
   },
   {
     "filename": "auto-ck.json",
@@ -316,6 +320,10 @@
     "name": "Abbreviations: Western Sahara legal"
   },
   {
+    "filename": "auto-eporg.int.json",
+    "name": "auto-eporg.int.json"
+  },
+  {
     "filename": "auto-er.json",
     "name": "Abbreviations: Eritrea legal"
   },
@@ -338,6 +346,10 @@
   {
     "filename": "auto-eu.int-de.json",
     "name": "auto-eu.int-de.json"
+  },
+  {
+    "filename": "auto-eu.int-se.json",
+    "name": "auto-eu.int-se.json"
   },
   {
     "filename": "auto-eu.int.json",
@@ -857,7 +869,7 @@
   },
   {
     "filename": "auto-sica.int.json",
-    "name": "Abbreviations: Sistema de la IntegraciÃ³n Centroamericana legal"
+    "name": "Abbreviations: Sistema de la Integración Centroamericana legal"
   },
   {
     "filename": "auto-sk.json",
@@ -885,7 +897,7 @@
   },
   {
     "filename": "auto-st.json",
-    "name": "Abbreviations: SÃ£o TomÃ© and PrÃ­ncipe legal"
+    "name": "Abbreviations: São Tomé and Príncipe legal"
   },
   {
     "filename": "auto-sv.json",

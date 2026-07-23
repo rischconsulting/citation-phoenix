@@ -1,0 +1,25 @@
+{
+  "filename": "auto-eporg.int.json",
+  "name": "European Patent Organisation",
+  "version": "2026-07-22 23:23:30 UTC",
+  "xdata": {
+    "default": {
+      "place": {
+        "EPORG.INT": "EPOrg",
+        "EPORG.INT:EPO": "EPO",
+        "EPORG.INT:AC": "Administrative Council"
+      }
+    },
+    "eporg.int:epo": {
+      "institution-part": {
+        "rs": "Receiving Section",
+        "sd": "Search Divisions",
+        "ed": "Examining Divisions",
+        "op": "Opposition Divisions",
+        "ld": "Legal Division",
+        "boa": "Boards of Appeal",
+        "eboa": "Enlarged Board of Appeal"
+      }
+    }
+  }
+}

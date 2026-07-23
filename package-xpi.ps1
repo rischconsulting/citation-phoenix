@@ -6,6 +6,37 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+function Update-JsonIndex {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$DirectoryPath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$IndexPath,
+
+        [string]$Filter = '*'
+    )
+
+    $items = Get-ChildItem -LiteralPath $DirectoryPath -File -Filter $Filter |
+        Sort-Object Name |
+        Select-Object -ExpandProperty Name
+
+    $json = ($items | ConvertTo-Json) + [Environment]::NewLine
+    [System.IO.File]::WriteAllText($IndexPath, $json, [System.Text.UTF8Encoding]::new($false))
+}
+
+$syncScript = Join-Path -Path $PSScriptRoot -ChildPath 'scripts\sync-juris-assets.ps1'
+Write-Host "Syncing Juris-M assets..." -ForegroundColor Cyan
+& $syncScript
+if ($LASTEXITCODE -ne 0) { throw "sync-juris-assets.ps1 failed with exit code $LASTEXITCODE" }
+Write-Host "Juris-M asset sync complete." -ForegroundColor Cyan
+
+# Keep bundled style indices aligned with source assets.
+Update-JsonIndex `
+    -DirectoryPath (Join-Path -Path $PSScriptRoot -ChildPath 'styles') `
+    -IndexPath (Join-Path -Path $PSScriptRoot -ChildPath 'styles/index.json') `
+    -Filter '*.csl'
+
 # --- Build ---
 Write-Host "Building bundle..." -ForegroundColor Cyan
 & c:\esbuild\esbuild.exe lib\main.mjs --bundle --format=iife --global-name=IndigoBookCSLM --platform=browser --outfile=content\indigobook-cslm.js
@@ -66,7 +97,9 @@ $filesToArchive = Get-ChildItem -Path $sourcePath -File -Recurse -Force |
 
         # Exclude VCS dir and output artifacts
         if ($rel -match '^(\.git[\\/]|\.git$)') { return $false }
-        if ($rel -match '^(jurism-zotero[\\/]|_old_versions[\\/])') { return $false }
+        if ($rel -match '(^|[\\/])\.git([\\/]|$)') { return $false }
+        if ($rel -match '^(jurism-zotero[\\/]|juris-source-cache[\\/]|_old_versions[\\/])') { return $false }
+        if ($rel -match '^scripts[\\/]sync-juris-assets-(backup[\\/]|report\.json$)') { return $false }
         if ($rel -ieq $zipName -or $rel -ieq $xpiName) { return $false }
 
         # Exclude script helpers from package

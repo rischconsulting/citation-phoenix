@@ -1,10 +1,38 @@
 {
-  "generatedAt": "2026-07-08T17:01:16.1833219-04:00",
-  "preferCanonicalGenerated": true,
+  "generatedAt": "2026-07-22T19:23:56.6994403-04:00",
+  "overwriteLocalOnConflict": true,
+  "backupRoot": "C:\\indigo-phoenix\\indigobook-cslm-0.2.0\\scripts\\sync-juris-assets-backup\\20260722-192310",
   "summary": {
     "preservedLocal": 0,
-    "replacedWithUpstream": 0,
-    "total": 0
+    "replacedWithUpstream": 2,
+    "dateMetadataOnly": 1,
+    "total": 2
   },
-  "conflicts": []
+  "dateMetadataOnly": [
+    {
+      "label": "juris-maps",
+      "relativePath": "versions.json",
+      "resolution": "date-metadata-only",
+      "destinationPath": "C:\\indigo-phoenix\\indigobook-cslm-0.2.0\\juris-maps\\versions.json",
+      "sourcePath": "C:\\Users\\mrisch\\AppData\\Local\\indigo-phoenix\\juris-source-cache\\legal-resource-registry-build\\juris-maps\\versions.json"
+    }
+  ],
+  "conflicts": [
+    {
+      "label": "juris-maps",
+      "relativePath": "juris-eporg.int-map.json",
+      "resolution": "replaced-with-upstream",
+      "destinationPath": "C:\\indigo-phoenix\\indigobook-cslm-0.2.0\\juris-maps\\juris-eporg.int-map.json",
+      "sourcePath": "C:\\Users\\mrisch\\AppData\\Local\\indigo-phoenix\\juris-source-cache\\legal-resource-registry-build\\juris-maps\\juris-eporg.int-map.json",
+      "backupPath": "C:\\indigo-phoenix\\indigobook-cslm-0.2.0\\scripts\\sync-juris-assets-backup\\20260722-192310\\juris-maps\\juris-eporg.int-map.json"
+    },
+    {
+      "label": "juris-abbrevs-auto",
+      "relativePath": "auto-eporg.int.json",
+      "resolution": "replaced-with-upstream",
+      "destinationPath": "C:\\indigo-phoenix\\indigobook-cslm-0.2.0\\juris-abbrevs\\auto-eporg.int.json",
+      "sourcePath": "C:\\Users\\mrisch\\AppData\\Local\\indigo-phoenix\\juris-source-cache\\legal-resource-registry-build\\juris-abbrevs\\auto-eporg.int.json",
+      "backupPath": "C:\\indigo-phoenix\\indigobook-cslm-0.2.0\\scripts\\sync-juris-assets-backup\\20260722-192310\\juris-abbrevs-auto\\auto-eporg.int.json"
+    }
+  ]
 }

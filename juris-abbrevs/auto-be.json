@@ -1,7 +1,7 @@
 {
   "filename": "auto-be.json",
   "name": "België",
-  "version": "2026-07-08 20:45:38 UTC",
+  "version": "2026-07-22 20:44:51 UTC",
   "xdata": {
     "default": {
       "place": {
@@ -74,7 +74,7 @@
         "BE:BRUSSEL:BRUSSEL:SINT.PIETERS.WOLUWE": "Sint-Pieters-Woluwe",
         "BE:BRUSSEL:BRUSSEL:UKKEL": "Ukkel",
         "BE:BRUSSEL:BRUSSEL:VORST": "Vorst",
-        "BE:BRUSSEL:VLAAMS.BRABANT": "Vlaams-Brabant",
+        "BE:BRUSSEL:VLAAMS.BRABANT": "Asse",
         "BE:BRUSSEL:VLAAMS.BRABANT:AARSCHOT": "Aarschot",
         "BE:BRUSSEL:VLAAMS.BRABANT:ASSE": "Asse",
         "BE:BRUSSEL:VLAAMS.BRABANT:DIEST": "Diest",
@@ -97,7 +97,7 @@
         "BE:BRUSSEL:WAALS.BRABANT:TUBEKE": "Tubeke",
         "BE:BRUSSEL:WAALS.BRABANT:WAVER": "Waver",
         "BE:GENT": "Gent",
-        "BE:GENT:OOST.VLAANDEREN": "Oost-Vlaanderen",
+        "BE:GENT:OOST.VLAANDEREN": "Gent",
         "BE:GENT:OOST.VLAANDEREN:AALST": "Aalst",
         "BE:GENT:OOST.VLAANDEREN:BEVEREN": "Beveren",
         "BE:GENT:OOST.VLAANDEREN:DEINZE": "Deinze",
@@ -117,7 +117,7 @@
         "BE:GENT:OOST.VLAANDEREN:ZELZATE": "Zelzate",
         "BE:GENT:OOST.VLAANDEREN:ZOMERGEM": "Zomergem",
         "BE:GENT:OOST.VLAANDEREN:ZOTTEGEM.HERZELE": "Zottegem-Herzele",
-        "BE:GENT:WEST.VLAANDEREN": "West-Vlaanderen",
+        "BE:GENT:WEST.VLAANDEREN": "Gent",
         "BE:GENT:WEST.VLAANDEREN:BRUGGE": "Brugge",
         "BE:GENT:WEST.VLAANDEREN:DIKSMUIDE": "Diksmuide",
         "BE:GENT:WEST.VLAANDEREN:HARELBEKE": "Harelbeke",
@@ -175,1088 +175,1115 @@
     },
     "be": {
       "institution-part": {
-        "bma": "Belgische Mededingingsautoriteit",
-        "const": "Grondwettelijk Hof",
-        "cs": "Raad van State",
-        "educ": "Raad voor betwistingen inzake studievoortgangsbeslissingen",
-        "electionc": "Raad voor Verkiezingsbetwistingen",
-        "envc": "Milieuhandhavingscollege",
-        "mc": "Krijgsraad",
-        "migc": "Raad voor Vreemdelingenbetwistingen",
-        "milc": "Militair Gerechtshof",
-        "permitc": "Raad voor Vergunningsbetwistingen",
-        "sc": "Hof van Cassatie"
+        "bma": "BMA",
+        "const": "GwH",
+        "cs": "RvS",
+        "educ": "R.Stvb.",
+        "electionc": "R. Verkb.",
+        "envc": "MHHC",
+        "mc": "Kr.",
+        "migc": "RvV",
+        "milc": "Mil. Ger.",
+        "permitc": "RvVb",
+        "sc": "Cass."
       }
     },
     "be:antwerpen": {
       "institution-part": {
-        "br": "AntwerpenBeslagr.",
-        "cc": "AntwerpenKh.",
-        "cfi": "AntwerpenRb.",
-        "corrc": "AntwerpenCorr.",
-        "dc": "AntwerpenVred.",
-        "famc": "AntwerpenFamrb.",
-        "juvc": "AntwerpenJeugdrb.",
-        "lc": "AntwerpenArbrb.",
-        "lca": "AntwerpenArbh.",
-        "pc": "AntwerpenPol.",
-        "pres": "AntwerpenVoorz.",
-        "sentc": "AntwerpenSurb."
+        "br": "Beslagr. Antwerpen",
+        "ca": "Antwerpen",
+        "cc": "Kh. Antwerpen",
+        "or": "Or. Antwerpen",
+        "cfi": "Rb. Antwerpen",
+        "corrc": "Corr. Antwerpen",
+        "dc": "Vred. Antwerpen",
+        "famc": "Famrb. Antwerpen",
+        "juvc": "Jeugdrb. Antwerpen",
+        "lc": "Arbrb Brussel (Fr.)",
+        "lca": "Arbh. Antwerpen",
+        "pc": "Pol. Antwerpen",
+        "pres": "KG Antwerpen",
+        "sentc": "Surb. Antwerpen"
       }
     },
     "be:antwerpen:antwerpen": {
       "institution-part": {
-        "coass": "AntwerpenAssisen",
-        "dc": "AntwerpenVred.",
-        "lca": "AntwerpenArbh."
+        "coass": "Assisen Antwerpen",
+        "dc": "Vred. Antwerpen",
+        "lca": "Arbh. Antwerpen"
       }
     },
     "be:antwerpen:antwerpen:arendonk": {
       "institution-part": {
-        "dc": "ArendonkVred."
+        "dc": "Vred. Arendonk"
       }
     },
     "be:antwerpen:antwerpen:boom": {
       "institution-part": {
-        "dc": "BoomVred."
+        "dc": "Vred. Boom"
       }
     },
     "be:antwerpen:antwerpen:brasschaat": {
       "institution-part": {
-        "dc": "BrasschaatVred."
+        "dc": "Vred. Brasschaat"
       }
     },
     "be:antwerpen:antwerpen:geel": {
       "institution-part": {
-        "dc": "GeelVred."
+        "dc": "Vred. Geel"
       }
     },
     "be:antwerpen:antwerpen:heist.op.den.berg": {
       "institution-part": {
-        "dc": "Heist-op-den-BergVred."
+        "dc": "Vred. Heist-op-den-Berg"
       }
     },
     "be:antwerpen:antwerpen:herentals": {
       "institution-part": {
-        "dc": "HerentalsVred."
+        "dc": "Vred. Herentals"
       }
     },
     "be:antwerpen:antwerpen:hoogstraten": {
       "institution-part": {
-        "dc": "HoogstratenVred."
+        "dc": "Vred. Hoogstraten"
       }
     },
     "be:antwerpen:antwerpen:kapellen": {
       "institution-part": {
-        "dc": "KapellenVred."
+        "dc": "Vred. Kapellen"
       }
     },
     "be:antwerpen:antwerpen:kontich": {
       "institution-part": {
-        "dc": "KontichVred."
+        "dc": "Vred. Kontich"
       }
     },
     "be:antwerpen:antwerpen:lier": {
       "institution-part": {
-        "dc": "LierVred."
+        "dc": "Vred. Lier"
       }
     },
     "be:antwerpen:antwerpen:mechelen": {
       "institution-part": {
-        "br": "MechelenBeslagr.",
-        "cc": "MechelenKh.",
-        "cfi": "MechelenRb.",
-        "corrc": "MechelenCorr.",
-        "dc": "MechelenVred.",
-        "famc": "MechelenFamrb.",
-        "juvc": "MechelenJeugdrb.",
-        "lc": "MechelenArbrb.",
-        "pc": "MechelenPol.",
-        "pres": "MechelenVoorz.",
-        "sentc": "MechelenSurb."
+        "br": "Beslagr. Mechelen",
+        "cc": "Kh. Mechelen",
+        "or": "Or. Mechelen",
+        "cfi": "Rb. Mechelen",
+        "corrc": "Corr. Mechelen",
+        "dc": "Vred. Mechelen",
+        "famc": "Famrb. Mechelen",
+        "juvc": "Jeugdrb. Mechelen",
+        "lc": "Arbrb Brussel (Fr.)",
+        "pc": "Pol. Mechelen",
+        "pres": "KG Mechelen",
+        "sentc": "Surb. Mechelen"
       }
     },
     "be:antwerpen:antwerpen:mol": {
       "institution-part": {
-        "dc": "MolVred."
+        "dc": "Vred. Mol"
       }
     },
     "be:antwerpen:antwerpen:schilde": {
       "institution-part": {
-        "dc": "SchildeVred."
+        "dc": "Vred. Schilde"
       }
     },
     "be:antwerpen:antwerpen:turnhout": {
       "institution-part": {
-        "br": "TurnhoutBeslagr.",
-        "cc": "TurnhoutKh.",
-        "cfi": "TurnhoutRb.",
-        "corrc": "TurnhoutCorr.",
-        "dc": "TurnhoutVred.",
-        "famc": "TurnhoutFamrb.",
-        "juvc": "TurnhoutJeugdrb.",
-        "lc": "TurnhoutArbrb.",
-        "pc": "TurnhoutPol.",
-        "pres": "TurnhoutVoorz.",
-        "sentc": "TurnhoutSurb."
+        "br": "Beslagr. Turnhout",
+        "cc": "Kh. Turnhout",
+        "or": "Or. Turnhout",
+        "cfi": "Rb. Turnhout",
+        "corrc": "Corr. Turnhout",
+        "dc": "Vred. Turnhout",
+        "famc": "Famrb. Turnhout",
+        "juvc": "Jeugdrb. Turnhout",
+        "lc": "Arbrb Brussel (Fr.)",
+        "pc": "Pol. Turnhout",
+        "pres": "KG Turnhout",
+        "sentc": "Surb. Turnhout"
       }
     },
     "be:antwerpen:antwerpen:westerlo": {
       "institution-part": {
-        "dc": "WesterloVred."
+        "dc": "Vred. Westerlo"
       }
     },
     "be:antwerpen:antwerpen:willebroek": {
       "institution-part": {
-        "dc": "WillebroekVred."
+        "dc": "Vred. Willebroek"
       }
     },
     "be:antwerpen:antwerpen:zandhoven": {
       "institution-part": {
-        "dc": "ZandhovenVred."
+        "dc": "Vred. Zandhoven"
       }
     },
     "be:antwerpen:limburg": {
       "institution-part": {
-        "coass": "LimburgAssisen",
-        "dc": "LimburgVred.",
-        "pc": "LimburgPol."
+        "coass": "Assisen Limburg",
+        "dc": "Vred. Limburg",
+        "pc": "Pol. Limburg"
       }
     },
     "be:antwerpen:limburg:beringen": {
       "institution-part": {
-        "dc": "BeringenVred.",
-        "pc": "BeringenPol."
+        "dc": "Vred. Beringen",
+        "pc": "Pol. Beringen"
       }
     },
     "be:antwerpen:limburg:bilzen": {
       "institution-part": {
-        "dc": "BilzenVred."
+        "dc": "Vred. Bilzen"
       }
     },
     "be:antwerpen:limburg:borgloon": {
       "institution-part": {
-        "dc": "BorgloonVred."
+        "dc": "Vred. Borgloon"
       }
     },
     "be:antwerpen:limburg:bree": {
       "institution-part": {
-        "dc": "BreeVred."
+        "dc": "Vred. Bree"
       }
     },
     "be:antwerpen:limburg:genk": {
       "institution-part": {
-        "dc": "GenkVred.",
-        "pc": "GenkPol."
+        "dc": "Vred. Genk",
+        "pc": "Pol. Genk"
       }
     },
     "be:antwerpen:limburg:hasselt": {
       "institution-part": {
-        "br": "HasseltBeslagr.",
-        "cfi": "HasseltRb.",
-        "corrc": "HasseltCorr.",
-        "dc": "HasseltVred.",
-        "famc": "HasseltFamrb.",
-        "juvc": "HasseltJeugdrb.",
-        "lca": "HasseltArbh.",
-        "pc": "HasseltPol.",
-        "pres": "HasseltVoorz.",
-        "sentc": "HasseltSurb."
+        "br": "Beslagr. Hasselt",
+        "cfi": "Rb. Hasselt",
+        "corrc": "Corr. Hasselt",
+        "dc": "Vred. Hasselt",
+        "famc": "Famrb. Hasselt",
+        "juvc": "Jeugdrb. Hasselt",
+        "lca": "Arbh. Hasselt",
+        "pc": "Pol. Hasselt",
+        "pres": "KG Hasselt",
+        "sentc": "Surb. Hasselt"
       }
     },
     "be:antwerpen:limburg:houthalen.helchteren": {
       "institution-part": {
-        "dc": "Houthalen-HelchterenVred."
+        "dc": "Vred. Houthalen-Helchteren"
       }
     },
     "be:antwerpen:limburg:limburg.aubel": {
       "institution-part": {
-        "dc": "Limburg-AubelVred."
+        "dc": "Vred. Limburg-Aubel"
       }
     },
     "be:antwerpen:limburg:maaseik": {
       "institution-part": {
-        "dc": "MaaseikVred.",
-        "pc": "MaaseikPol."
+        "dc": "Vred. Maaseik",
+        "pc": "Pol. Maaseik"
       }
     },
     "be:antwerpen:limburg:maasmechelen": {
       "institution-part": {
-        "dc": "MaasmechelenVred."
+        "dc": "Vred. Maasmechelen"
       }
     },
     "be:antwerpen:limburg:neerpelt.lommel": {
       "institution-part": {
-        "dc": "Neerpelt-LommelVred."
+        "dc": "Vred. Neerpelt-Lommel"
       }
     },
     "be:antwerpen:limburg:sint.truiden": {
       "institution-part": {
-        "dc": "Sint-TruidenVred.",
-        "pc": "Sint-TruidenPol."
+        "dc": "Vred. Sint-Truiden",
+        "pc": "Pol. Sint-Truiden"
       }
     },
     "be:antwerpen:limburg:tongeren": {
       "institution-part": {
-        "br": "TongerenBeslagr.",
-        "cc": "TongerenKh.",
-        "cfi": "TongerenRb.",
-        "corrc": "TongerenCorr.",
-        "famc": "TongerenFamrb.",
-        "juvc": "TongerenJeugdrb.",
-        "lc": "TongerenArbrb.",
-        "pc": "TongerenPol.",
-        "pres": "TongerenVoorz.",
-        "sentc": "TongerenSurb."
+        "br": "Beslagr. Tongeren",
+        "cc": "Kh. Tongeren",
+        "or": "Or. Tongeren",
+        "cfi": "Rb. Tongeren",
+        "corrc": "Corr. Tongeren",
+        "famc": "Famrb. Tongeren",
+        "juvc": "Jeugdrb. Tongeren",
+        "lc": "Arbrb Brussel (Fr.)",
+        "pc": "Pol. Tongeren",
+        "pres": "KG Tongeren",
+        "sentc": "Surb. Tongeren"
       }
     },
     "be:antwerpen:limburg:tongeren.voeren": {
       "institution-part": {
-        "dc": "Tongeren-VoerenVred."
+        "dc": "Vred. Tongeren-Voeren"
       }
     },
     "be:bergen": {
       "institution-part": {
-        "dc": "BergenVred.",
-        "lca": "BergenArbh."
+        "dc": "Vred. Bergen",
+        "lca": "Arbh. Bergen"
       }
     },
     "be:bergen:henegouwen": {
       "institution-part": {
-        "coass": "HenegouwenAssisen"
+        "coass": "Assisen Henegouwen"
       }
     },
     "be:bergen:henegouwen:aat.lessen": {
       "institution-part": {
-        "dc": "Aat-LessenVred."
+        "dc": "Vred. Aat-Lessen"
       }
     },
     "be:bergen:henegouwen:beaumont.chimay.merbes.le.chateau": {
       "institution-part": {
-        "dc": "Beaumont-Chimay-Merbes-le-ChâteauVred."
+        "dc": "Vred. Beaumont-Chimay-Merbes-le-Château"
       }
     },
     "be:bergen:henegouwen:bergen": {
       "institution-part": {
-        "br": "BergenBeslagr.",
-        "cc": "BergenKh.",
-        "cfi": "BergenRb.",
-        "corrc": "BergenCorr.",
-        "famc": "BergenFamrb.",
-        "juvc": "BergenJeugdrb.",
-        "pc": "BergenPol.",
-        "pres": "BergenVoorz.",
-        "sentc": "BergenSurb."
+        "br": "Beslagr. Bergen",
+        "cc": "Kh. Bergen",
+        "or": "Or. Bergen",
+        "cfi": "Rb. Bergen",
+        "corrc": "Corr. Bergen",
+        "famc": "Famrb. Bergen",
+        "juvc": "Jeugdrb. Bergen",
+        "pc": "Pol. Bergen",
+        "pres": "KG Bergen",
+        "sentc": "Surb. Bergen"
       }
     },
     "be:bergen:henegouwen:binche": {
       "institution-part": {
-        "dc": "BincheVred.",
-        "lc": "BincheArbrb."
+        "dc": "Vred. Binche",
+        "lc": "Arbrb Brussel (Fr.)"
       }
     },
     "be:bergen:henegouwen:boussu": {
       "institution-part": {
-        "dc": "BoussuVred."
+        "dc": "Vred. Boussu"
       }
     },
     "be:bergen:henegouwen:charleroi": {
       "institution-part": {
-        "br": "CharleroiBeslagr.",
-        "cc": "CharleroiKh.",
-        "cfi": "CharleroiRb.",
-        "corrc": "CharleroiCorr.",
-        "dc": "CharleroiVred.",
-        "famc": "CharleroiFamrb.",
-        "juvc": "CharleroiJeugdrb.",
-        "lc": "CharleroiArbrb.",
-        "pc": "CharleroiPol.",
-        "pres": "CharleroiVoorz.",
-        "sentc": "CharleroiSurb."
+        "br": "Beslagr. Charleroi",
+        "cc": "Kh. Charleroi",
+        "or": "Or. Charleroi",
+        "cfi": "Rb. Charleroi",
+        "corrc": "Corr. Charleroi",
+        "dc": "Vred. Charleroi",
+        "famc": "Famrb. Charleroi",
+        "juvc": "Jeugdrb. Charleroi",
+        "lc": "Arbrb Brussel (Fr.)",
+        "pc": "Pol. Charleroi",
+        "pres": "KG Charleroi",
+        "sentc": "Surb. Charleroi"
       }
     },
     "be:bergen:henegouwen:chatelet": {
       "institution-part": {
-        "dc": "ChâteletVred."
+        "dc": "Vred. Châtelet"
       }
     },
     "be:bergen:henegouwen:doornik": {
       "institution-part": {
-        "br": "DoornikBeslagr.",
-        "cc": "DoornikKh.",
-        "cfi": "DoornikRb.",
-        "corrc": "DoornikCorr.",
-        "dc": "DoornikVred.",
-        "famc": "DoornikFamrb.",
-        "juvc": "DoornikJeugdrb.",
-        "lc": "DoornikArbrb.",
-        "pc": "DoornikPol.",
-        "pres": "DoornikVoorz.",
-        "sentc": "DoornikSurb."
+        "br": "Beslagr. Doornik",
+        "cc": "Kh. Doornik",
+        "or": "Or. Doornik",
+        "cfi": "Rb. Doornik",
+        "corrc": "Corr. Doornik",
+        "dc": "Vred. Doornik",
+        "famc": "Famrb. Doornik",
+        "juvc": "Jeugdrb. Doornik",
+        "lc": "Arbrb Brussel (Fr.)",
+        "pc": "Pol. Doornik",
+        "pres": "KG Doornik",
+        "sentc": "Surb. Doornik"
       }
     },
     "be:bergen:henegouwen:dour.colfontaine": {
       "institution-part": {
-        "dc": "Dour-ColfontaineVred."
+        "dc": "Vred. Dour-Colfontaine"
       }
     },
     "be:bergen:henegouwen:enghien.lens": {
       "institution-part": {
-        "dc": "Enghien-LensVred."
+        "dc": "Vred. Enghien-Lens"
       }
     },
     "be:bergen:henegouwen:fontaine.l.eveque": {
       "institution-part": {
-        "dc": "Fontaine-l'EvêqueVred.",
-        "lc": "Fontaine-l'EvêqueArbrb."
+        "dc": "Vred. Fontaine-l'Evêque",
+        "lc": "Arbrb Brussel (Fr.)"
       }
     },
     "be:bergen:henegouwen:la.louvière": {
       "institution-part": {
-        "dc": "La LouvièreVred."
+        "dc": "Vred. La Louvière"
       }
     },
     "be:bergen:henegouwen:moeskroen": {
       "institution-part": {
-        "lc": "MoeskroenArbrb."
+        "lc": "Arbrb Brussel (Fr.)"
       }
     },
     "be:bergen:henegouwen:moeskroen.komen.waasten": {
       "institution-part": {
-        "dc": "Moeskroen-Komen-WaastenVred."
+        "dc": "Vred. Moeskroen-Komen-Waasten"
       }
     },
     "be:bergen:henegouwen:peruwelz.leuze.en.hainaut": {
       "institution-part": {
-        "dc": "Péruwelz-Leuze en HainautVred."
+        "dc": "Vred. Péruwelz-Leuze en Hainaut"
       }
     },
     "be:bergen:henegouwen:seneffe": {
       "institution-part": {
-        "dc": "SeneffeVred."
+        "dc": "Vred. Seneffe"
       }
     },
     "be:bergen:henegouwen:thuin": {
       "institution-part": {
-        "dc": "ThuinVred."
+        "dc": "Vred. Thuin"
       }
     },
     "be:bergen:henegouwen:zinnik": {
       "institution-part": {
-        "dc": "ZinnikVred."
+        "dc": "Vred. Zinnik"
       }
     },
     "be:brussel": {
       "institution-part": {
-        "cc.fr": "BrusselKh. Brussel (Fr.)",
-        "cc.nl": "BrusselKh. Brussel (Nl.)",
-        "coass": "BrusselAssisen",
-        "dc": "BrusselVred.",
-        "lc.fr": "BrusselArbrb. Brussel (Fr.)",
-        "lc.nl": "BrusselArbrb. Brussel (Nl.)",
-        "lca": "BrusselArbh.",
-        "pc.fr": "BrusselPol. Brussel (Fr.)",
-        "pc.nl": "BrusselPol. Brussel (Nl.)"
+        "cc.fr": "Kh. Brussel (Fr.)",
+        "cc.nl": "Kh. Brussel (Nl.)",
+        "or.fr": "Or. Brussel (Fr.)",
+        "or.nl": "Or. Brussel (Nl.)",
+        "coass": "Assisen Brussel",
+        "dc": "Vred. Brussel",
+        "lc.fr": "Arbrb. Brussel (Fr.)",
+        "lc.nl": "Arbrb. Brussel (Nl.)",
+        "lca": "Arbh. Brussel",
+        "pc.fr": "Pol. Brussel (Fr.)",
+        "pc.nl": "Pol. Brussel (Nl.)"
       }
     },
     "be:brussel:brussel": {
       "institution-part": {
-        "dc": "BrusselVred."
+        "dc": "Vred. Brussel"
       }
     },
     "be:brussel:brussel:anderlecht": {
       "institution-part": {
-        "dc": "AnderlechtVred."
+        "dc": "Vred. Anderlecht"
       }
     },
     "be:brussel:brussel:elsene": {
       "institution-part": {
-        "dc": "ElseneVred."
+        "dc": "Vred. Elsene"
       }
     },
     "be:brussel:brussel:etterbeek": {
       "institution-part": {
-        "dc": "EtterbeekVred."
+        "dc": "Vred. Etterbeek"
       }
     },
     "be:brussel:brussel:jette": {
       "institution-part": {
-        "dc": "JetteVred."
+        "dc": "Vred. Jette"
       }
     },
     "be:brussel:brussel:ouderghem": {
       "institution-part": {
-        "dc": "OuderghemVred."
+        "dc": "Vred. Ouderghem"
       }
     },
     "be:brussel:brussel:schaarbeek": {
       "institution-part": {
-        "dc": "SchaarbeekVred."
+        "dc": "Vred. Schaarbeek"
       }
     },
     "be:brussel:brussel:sint.gillis": {
       "institution-part": {
-        "dc": "Sint-GillisVred."
+        "dc": "Vred. Sint-Gillis"
       }
     },
     "be:brussel:brussel:sint.jans.molenbeek": {
       "institution-part": {
-        "dc": "Sint-Jans-MolenbeekVred."
+        "dc": "Vred. Sint-Jans-Molenbeek"
       }
     },
     "be:brussel:brussel:sint.joost.ten.node": {
       "institution-part": {
-        "dc": "Sint-Joost-ten-NodeVred."
+        "dc": "Vred. Sint-Joost-ten-Node"
       }
     },
     "be:brussel:brussel:sint.pieters.woluwe": {
       "institution-part": {
-        "dc": "Sint-Pieters-WoluweVred."
+        "dc": "Vred. Sint-Pieters-Woluwe"
       }
     },
     "be:brussel:brussel:ukkel": {
       "institution-part": {
-        "dc": "UkkelVred."
+        "dc": "Vred. Ukkel"
       }
     },
     "be:brussel:brussel:vorst": {
       "institution-part": {
-        "dc": "VorstVred."
+        "dc": "Vred. Vorst"
       }
     },
     "be:brussel:vlaams.brabant": {
       "institution-part": {
-        "coass": "Vlaams-BrabantAssisen"
+        "coass": "Assisen Asse"
       }
     },
     "be:brussel:vlaams.brabant:aarschot": {
       "institution-part": {
-        "dc": "AarschotVred."
+        "dc": "Vred. Aarschot"
       }
     },
     "be:brussel:vlaams.brabant:asse": {
       "institution-part": {
-        "dc": "AsseVred."
+        "dc": "Vred. Asse"
       }
     },
     "be:brussel:vlaams.brabant:diest": {
       "institution-part": {
-        "dc": "DiestVred."
+        "dc": "Vred. Diest"
       }
     },
     "be:brussel:vlaams.brabant:grimbergen": {
       "institution-part": {
-        "dc": "GrimbergenVred."
+        "dc": "Vred. Grimbergen"
       }
     },
     "be:brussel:vlaams.brabant:haacht": {
       "institution-part": {
-        "dc": "HaachtVred."
+        "dc": "Vred. Haacht"
       }
     },
     "be:brussel:vlaams.brabant:halle": {
       "institution-part": {
-        "dc": "HalleVred.",
-        "pc": "HallePol."
+        "dc": "Vred. Halle",
+        "pc": "Pol. Halle"
       }
     },
     "be:brussel:vlaams.brabant:herne.sint.pieters.leeuw": {
       "institution-part": {
-        "dc": "Herne-Sint-Pieters-LeeuwVred."
+        "dc": "Vred. Herne-Sint-Pieters-Leeuw"
       }
     },
     "be:brussel:vlaams.brabant:kraainem.sint.genesius.rode": {
       "institution-part": {
-        "dc": "Kraainem-Sint-Genesius-RodeVred."
+        "dc": "Vred. Kraainem-Sint-Genesius-Rode"
       }
     },
     "be:brussel:vlaams.brabant:landen.zoutleeuw": {
       "institution-part": {
-        "dc": "Landen-ZoutleeuwVred."
+        "dc": "Vred. Landen-Zoutleeuw"
       }
     },
     "be:brussel:vlaams.brabant:lennik": {
       "institution-part": {
-        "dc": "LennikVred."
+        "dc": "Vred. Lennik"
       }
     },
     "be:brussel:vlaams.brabant:leuven": {
       "institution-part": {
-        "br": "LeuvenBeslagr.",
-        "cc": "LeuvenKh.",
-        "cfi": "LeuvenRb.",
-        "corrc": "LeuvenCorr.",
-        "dc": "LeuvenVred.",
-        "famc": "LeuvenFamrb.",
-        "juvc": "LeuvenJeugdrb.",
-        "lc": "LeuvenArbrb.",
-        "pc": "LeuvenPol.",
-        "pres": "LeuvenVoorz.",
-        "sentc": "LeuvenSurb."
+        "br": "Beslagr. Leuven",
+        "cc": "Kh. Leuven",
+        "or": "Or. Leuven",
+        "cfi": "Rb. Leuven",
+        "corrc": "Corr. Leuven",
+        "dc": "Vred. Leuven",
+        "famc": "Famrb. Leuven",
+        "juvc": "Jeugdrb. Leuven",
+        "lc": "Arbrb Brussel (Fr.)",
+        "pc": "Pol. Leuven",
+        "pres": "KG Leuven",
+        "sentc": "Surb. Leuven"
       }
     },
     "be:brussel:vlaams.brabant:meise": {
       "institution-part": {
-        "dc": "MeiseVred."
+        "dc": "Vred. Meise"
       }
     },
     "be:brussel:vlaams.brabant:overijse.zaventem": {
       "institution-part": {
-        "dc": "Overijse-ZaventemVred."
+        "dc": "Vred. Overijse-Zaventem"
       }
     },
     "be:brussel:vlaams.brabant:tienen": {
       "institution-part": {
-        "dc": "TienenVred."
+        "dc": "Vred. Tienen"
       }
     },
     "be:brussel:vlaams.brabant:vilvoorde": {
       "institution-part": {
-        "dc": "VilvoordeVred.",
-        "pc": "VilvoordePol."
+        "dc": "Vred. Vilvoorde",
+        "pc": "Pol. Vilvoorde"
       }
     },
     "be:brussel:waals.brabant": {
       "institution-part": {
-        "cfi": "Waals-BrabantRb.",
-        "coass": "Waals-BrabantAssisen"
+        "cfi": "Rb. Waals-Brabant",
+        "coass": "Assisen Waals-Brabant"
       }
     },
     "be:brussel:waals.brabant:eigenbrakel": {
       "institution-part": {
-        "dc": "EigenbrakelVred."
+        "dc": "Vred. Eigenbrakel"
       }
     },
     "be:brussel:waals.brabant:geldenaken.perwijs": {
       "institution-part": {
-        "dc": "Geldenaken-PerwijsVred."
+        "dc": "Vred. Geldenaken-Perwijs"
       }
     },
     "be:brussel:waals.brabant:nijvel": {
       "institution-part": {
-        "cc": "NijvelKh.",
-        "dc": "NijvelVred.",
-        "lc": "NijvelArbrb.",
-        "pc": "NijvelPol."
+        "cc": "Kh. Nijvel",
+        "or": "Or. Nijvel",
+        "dc": "Vred. Nijvel",
+        "lc": "Arbrb Brussel (Fr.)",
+        "pc": "Pol. Nijvel"
       }
     },
     "be:brussel:waals.brabant:tubeke": {
       "institution-part": {
-        "dc": "TubekeVred."
+        "dc": "Vred. Tubeke"
       }
     },
     "be:brussel:waals.brabant:waver": {
       "institution-part": {
-        "dc": "WaverVred.",
-        "lc": "WaverArbrb.",
-        "pc": "WaverPol."
+        "dc": "Vred. Waver",
+        "lc": "Arbrb Brussel (Fr.)",
+        "pc": "Pol. Waver"
       }
     },
     "be:gent": {
       "institution-part": {
-        "ca": "GentHof van Beroep"
+        "ca": "Gent"
       }
     },
     "be:gent:oost.vlaanderen": {
       "institution-part": {
-        "ca": "Oost-VlaanderenHof van Beroep",
-        "coass": "Oost-VlaanderenAssisen"
+        "ca": "Gent",
+        "coass": "Assisen Gent"
       }
     },
     "be:gent:oost.vlaanderen:aalst": {
       "institution-part": {
-        "dc": "AalstVred.",
-        "lc": "AalstArbrb.",
-        "pc": "AalstPol."
+        "dc": "Vred. Aalst",
+        "lc": "Arbrb Brussel (Fr.)",
+        "pc": "Pol. Aalst"
       }
     },
     "be:gent:oost.vlaanderen:beveren": {
       "institution-part": {
-        "dc": "BeverenVred."
+        "dc": "Vred. Beveren"
       }
     },
     "be:gent:oost.vlaanderen:deinze": {
       "institution-part": {
-        "dc": "DeinzeVred."
+        "dc": "Vred. Deinze"
       }
     },
     "be:gent:oost.vlaanderen:dendermonde": {
       "institution-part": {
-        "br": "DendermondeBeslagr.",
-        "cc": "DendermondeKh.",
-        "cfi": "DendermondeRb.",
-        "corrc": "DendermondeCorr.",
-        "famc": "DendermondeFamrb.",
-        "juvc": "DendermondeJeugdrb.",
-        "lc": "DendermondeArbrb.",
-        "pc": "DendermondePol.",
-        "pres": "DendermondeVoorz.",
-        "sentc": "DendermondeSurb."
+        "br": "Beslagr. Dendermonde",
+        "cc": "Kh. Dendermonde",
+        "or": "Or. Dendermonde",
+        "cfi": "Rb. Dendermonde",
+        "corrc": "Corr. Dendermonde",
+        "famc": "Famrb. Dendermonde",
+        "juvc": "Jeugdrb. Dendermonde",
+        "lc": "Arbrb Brussel (Fr.)",
+        "pc": "Pol. Dendermonde",
+        "pres": "KG Dendermonde",
+        "sentc": "Surb. Dendermonde"
       }
     },
     "be:gent:oost.vlaanderen:dendermonde.hamme": {
       "institution-part": {
-        "dc": "Dendermonde-HammeVred."
+        "dc": "Vred. Dendermonde-Hamme"
       }
     },
     "be:gent:oost.vlaanderen:eeklo": {
       "institution-part": {
-        "dc": "EekloVred."
+        "dc": "Vred. Eeklo"
       }
     },
     "be:gent:oost.vlaanderen:gent": {
       "institution-part": {
-        "cc": "GentKh.",
-        "cfi": "GentRb.",
-        "dc": "GentVred.",
-        "lc": "GentArbrb.",
-        "lca": "GentArbh.",
-        "pc": "GentPol."
+        "cc": "Kh. Gent",
+        "or": "Or. Gent",
+        "cfi": "Rb. Gent",
+        "dc": "Vred. Gent",
+        "lc": "Arbrb Brussel (Fr.)",
+        "lca": "Arbh. Gent",
+        "pc": "Pol. Gent"
       }
     },
     "be:gent:oost.vlaanderen:geraardsbergen.brakel": {
       "institution-part": {
-        "dc": "Geraardsbergen-BrakelVred."
+        "dc": "Vred. Geraardsbergen-Brakel"
       }
     },
     "be:gent:oost.vlaanderen:lokeren": {
       "institution-part": {
-        "dc": "LokerenVred."
+        "dc": "Vred. Lokeren"
       }
     },
     "be:gent:oost.vlaanderen:merelbeke": {
       "institution-part": {
-        "dc": "MerelbekeVred."
+        "dc": "Vred. Merelbeke"
       }
     },
     "be:gent:oost.vlaanderen:ninove": {
       "institution-part": {
-        "dc": "NinoveVred."
+        "dc": "Vred. Ninove"
       }
     },
     "be:gent:oost.vlaanderen:oudenaarde": {
       "institution-part": {
-        "cc": "OudenaardeKh.",
-        "cfi": "OudenaardeRb.",
-        "lc": "OudenaardeArbrb.",
-        "pc": "OudenaardePol."
+        "cc": "Kh. Oudenaarde",
+        "or": "Or. Oudenaarde",
+        "cfi": "Rb. Oudenaarde",
+        "lc": "Arbrb Brussel (Fr.)",
+        "pc": "Pol. Oudenaarde"
       }
     },
     "be:gent:oost.vlaanderen:oudenaarde.kruishoutem": {
       "institution-part": {
-        "dc": "Oudenaarde-KruishoutemVred."
+        "dc": "Vred. Oudenaarde-Kruishoutem"
       }
     },
     "be:gent:oost.vlaanderen:ronse": {
       "institution-part": {
-        "dc": "RonseVred."
+        "dc": "Vred. Ronse"
       }
     },
     "be:gent:oost.vlaanderen:sint.niklaas": {
       "institution-part": {
-        "dc": "Sint-NiklaasVred.",
-        "lc": "Sint-NiklaasArbrb.",
-        "pc": "Sint-NiklaasPol."
+        "dc": "Vred. Sint-Niklaas",
+        "lc": "Arbrb Brussel (Fr.)",
+        "pc": "Pol. Sint-Niklaas"
       }
     },
     "be:gent:oost.vlaanderen:wetteren.zele": {
       "institution-part": {
-        "dc": "Wetteren-ZeleVred."
+        "dc": "Vred. Wetteren-Zele"
       }
     },
     "be:gent:oost.vlaanderen:zelzate": {
       "institution-part": {
-        "dc": "ZelzateVred."
+        "dc": "Vred. Zelzate"
       }
     },
     "be:gent:oost.vlaanderen:zomergem": {
       "institution-part": {
-        "dc": "ZomergemVred."
+        "dc": "Vred. Zomergem"
       }
     },
     "be:gent:oost.vlaanderen:zottegem.herzele": {
       "institution-part": {
-        "dc": "Zottegem-HerzeleVred."
+        "dc": "Vred. Zottegem-Herzele"
       }
     },
     "be:gent:west.vlaanderen": {
       "institution-part": {
-        "ca": "West-VlaanderenHof van Beroep",
-        "coass": "West-VlaanderenAssisen"
+        "ca": "Gent",
+        "coass": "Assisen Gent"
       }
     },
     "be:gent:west.vlaanderen:brugge": {
       "institution-part": {
-        "cc": "BruggeKh.",
-        "cfi": "BruggeRb.",
-        "dc": "BruggeVred.",
-        "lc": "BruggeArbrb.",
-        "lca": "BruggeArbh.",
-        "pc": "BruggePol."
+        "cc": "Kh. Brugge",
+        "or": "Or. Brugge",
+        "cfi": "Rb. Brugge",
+        "dc": "Vred. Brugge",
+        "lc": "Arbrb Brussel (Fr.)",
+        "lca": "Arbh. Brugge",
+        "pc": "Pol. Brugge"
       }
     },
     "be:gent:west.vlaanderen:diksmuide": {
       "institution-part": {
-        "dc": "DiksmuideVred."
+        "dc": "Vred. Diksmuide"
       }
     },
     "be:gent:west.vlaanderen:harelbeke": {
       "institution-part": {
-        "dc": "HarelbekeVred."
+        "dc": "Vred. Harelbeke"
       }
     },
     "be:gent:west.vlaanderen:ieper": {
       "institution-part": {
-        "cc": "IeperKh.",
-        "cfi": "IeperRb.",
-        "dc": "IeperVred.",
-        "lc": "IeperArbrb.",
-        "pc": "IeperPol."
+        "cc": "Kh. Ieper",
+        "or": "Or. Ieper",
+        "cfi": "Rb. Ieper",
+        "dc": "Vred. Ieper",
+        "lc": "Arbrb Brussel (Fr.)",
+        "pc": "Pol. Ieper"
       }
     },
     "be:gent:west.vlaanderen:ieper.poperinge": {
       "institution-part": {
-        "dc": "Ieper-PoperingeVred."
+        "dc": "Vred. Ieper-Poperinge"
       }
     },
     "be:gent:west.vlaanderen:izegem": {
       "institution-part": {
-        "dc": "IzegemVred."
+        "dc": "Vred. Izegem"
       }
     },
     "be:gent:west.vlaanderen:kortrijk": {
       "institution-part": {
-        "br": "KortrijkBeslagr.",
-        "cc": "KortrijkKh.",
-        "cfi": "KortrijkRb.",
-        "corrc": "KortrijkCorr.",
-        "dc": "KortrijkVred.",
-        "famc": "KortrijkFamrb.",
-        "juvc": "KortrijkJeugdrb.",
-        "lc": "KortrijkArbrb.",
-        "pc": "KortrijkPol.",
-        "pres": "KortrijkVoorz.",
-        "sentc": "KortrijkSurb."
+        "br": "Beslagr. Kortrijk",
+        "cc": "Kh. Kortrijk",
+        "or": "Or. Kortrijk",
+        "cfi": "Rb. Kortrijk",
+        "corrc": "Corr. Kortrijk",
+        "dc": "Vred. Kortrijk",
+        "famc": "Famrb. Kortrijk",
+        "juvc": "Jeugdrb. Kortrijk",
+        "lc": "Arbrb Brussel (Fr.)",
+        "pc": "Pol. Kortrijk",
+        "pres": "KG Kortrijk",
+        "sentc": "Surb. Kortrijk"
       }
     },
     "be:gent:west.vlaanderen:menen": {
       "institution-part": {
-        "dc": "MenenVred."
+        "dc": "Vred. Menen"
       }
     },
     "be:gent:west.vlaanderen:oostende": {
       "institution-part": {
-        "dc": "OostendeVred."
+        "dc": "Vred. Oostende"
       }
     },
     "be:gent:west.vlaanderen:roeselare": {
       "institution-part": {
-        "dc": "RoeselareVred.",
-        "lc": "RoeselareArbrb."
+        "dc": "Vred. Roeselare",
+        "lc": "Arbrb Brussel (Fr.)"
       }
     },
     "be:gent:west.vlaanderen:tielt": {
       "institution-part": {
-        "dc": "TieltVred."
+        "dc": "Vred. Tielt"
       }
     },
     "be:gent:west.vlaanderen:torhout": {
       "institution-part": {
-        "dc": "TorhoutVred."
+        "dc": "Vred. Torhout"
       }
     },
     "be:gent:west.vlaanderen:veurne": {
       "institution-part": {
-        "br": "VeurneBeslagr.",
-        "cc": "VeurneKh.",
-        "cfi": "VeurneRb.",
-        "corrc": "VeurneCorr.",
-        "famc": "VeurneFamrb.",
-        "juvc": "VeurneJeugdrb.",
-        "lc": "VeurneArbrb.",
-        "pc": "VeurnePol.",
-        "pres": "VeurneVoorz.",
-        "sentc": "VeurneSurb."
+        "br": "Beslagr. Veurne",
+        "cc": "Kh. Veurne",
+        "or": "Or. Veurne",
+        "cfi": "Rb. Veurne",
+        "corrc": "Corr. Veurne",
+        "famc": "Famrb. Veurne",
+        "juvc": "Jeugdrb. Veurne",
+        "lc": "Arbrb Brussel (Fr.)",
+        "pc": "Pol. Veurne",
+        "pres": "KG Veurne",
+        "sentc": "Surb. Veurne"
       }
     },
     "be:gent:west.vlaanderen:veurne.nieuwpoort": {
       "institution-part": {
-        "dc": "Veurne-NieuwpoortVred."
+        "dc": "Vred. Veurne-Nieuwpoort"
       }
     },
     "be:gent:west.vlaanderen:waregem": {
       "institution-part": {
-        "dc": "WaregemVred."
+        "dc": "Vred. Waregem"
       }
     },
     "be:gent:west.vlaanderen:wervik": {
       "institution-part": {
-        "dc": "WervikVred."
+        "dc": "Vred. Wervik"
       }
     },
     "be:luik": {
       "institution-part": {
-        "ca": "LuikHof van Beroep"
+        "ca": "Luik"
       }
     },
     "be:luik:luik": {
       "institution-part": {
-        "br": "LuikBeslagr.",
-        "cc": "LuikKh.",
-        "cfi": "LuikRb.",
-        "coass": "LuikAssisen",
-        "corrc": "LuikCorr.",
-        "dc": "LuikVred.",
-        "famc": "LuikFamrb.",
-        "juvc": "LuikJeugdrb.",
-        "lc": "LuikArbrb.",
-        "lca": "LuikArbh.",
-        "pc": "LuikPol.",
-        "pres": "LuikVoorz.",
-        "sentc": "LuikSurb."
+        "br": "Beslagr. Luik",
+        "cc": "Kh. Luik",
+        "or": "Or. Luik",
+        "cfi": "Rb. Luik",
+        "coass": "Assisen Luik",
+        "corrc": "Corr. Luik",
+        "dc": "Vred. Luik",
+        "famc": "Famrb. Luik",
+        "juvc": "Jeugdrb. Luik",
+        "lc": "Arbrb Brussel (Fr.)",
+        "lca": "Arbh. Luik",
+        "pc": "Pol. Luik",
+        "pres": "KG Luik",
+        "sentc": "Surb. Luik"
       }
     },
     "be:luik:luik:borgworm": {
       "institution-part": {
-        "dc": "BorgwormVred."
+        "dc": "Vred. Borgworm"
       }
     },
     "be:luik:luik:eupen": {
       "institution-part": {
-        "br": "EupenBeslagr.",
-        "cc": "EupenKh.",
-        "cfi": "EupenRb.",
-        "corrc": "EupenCorr.",
-        "dc": "EupenVred.",
-        "famc": "EupenFamrb.",
-        "juvc": "EupenJeugdrb.",
-        "lc": "EupenArbrb.",
-        "pc": "EupenPol.",
-        "pres": "EupenVoorz.",
-        "sentc": "EupenSurb."
+        "br": "Beslagr. Eupen",
+        "cc": "Kh. Eupen",
+        "or": "Or. Eupen",
+        "cfi": "Rb. Eupen",
+        "corrc": "Corr. Eupen",
+        "dc": "Vred. Eupen",
+        "famc": "Famrb. Eupen",
+        "juvc": "Jeugdrb. Eupen",
+        "lc": "Arbrb Brussel (Fr.)",
+        "pc": "Pol. Eupen",
+        "pres": "KG Eupen",
+        "sentc": "Surb. Eupen"
       }
     },
     "be:luik:luik:eupen:sankt.vith": {
       "institution-part": {
-        "dc": "Sankt-VithVred.",
-        "pc": "Sankt-VithPol."
+        "dc": "Vred. Sankt-Vith",
+        "pc": "Pol. Sankt-Vith"
       }
     },
     "be:luik:luik:fleron": {
       "institution-part": {
-        "dc": "FléronVred."
+        "dc": "Vred. Fléron"
       }
     },
     "be:luik:luik:grace.hollogne": {
       "institution-part": {
-        "dc": "Grâce-HollogneVred."
+        "dc": "Vred. Grâce-Hollogne"
       }
     },
     "be:luik:luik:hamoir": {
       "institution-part": {
-        "dc": "HamoirVred."
+        "dc": "Vred. Hamoir"
       }
     },
     "be:luik:luik:herstal": {
       "institution-part": {
-        "dc": "HerstalVred."
+        "dc": "Vred. Herstal"
       }
     },
     "be:luik:luik:hoei": {
       "institution-part": {
-        "br": "HoeiBeslagr.",
-        "cc": "HoeiKh.",
-        "cfi": "HoeiRb.",
-        "corrc": "HoeiCorr.",
-        "dc": "HoeiVred.",
-        "famc": "HoeiFamrb.",
-        "juvc": "HoeiJeugdrb.",
-        "lc": "HoeiArbrb.",
-        "pc": "HoeiPol.",
-        "pres": "HoeiVoorz.",
-        "sentc": "HoeiSurb."
+        "br": "Beslagr. Hoei",
+        "cc": "Kh. Hoei",
+        "or": "Or. Hoei",
+        "cfi": "Rb. Hoei",
+        "corrc": "Corr. Hoei",
+        "dc": "Vred. Hoei",
+        "famc": "Famrb. Hoei",
+        "juvc": "Jeugdrb. Hoei",
+        "lc": "Arbrb Brussel (Fr.)",
+        "pc": "Pol. Hoei",
+        "pres": "KG Hoei",
+        "sentc": "Surb. Hoei"
       }
     },
     "be:luik:luik:hoei.hannuit": {
       "institution-part": {
-        "dc": "Hoei-HannuitVred."
+        "dc": "Vred. Hoei-Hannuit"
       }
     },
     "be:luik:luik:malmedy.spa.stavelot": {
       "institution-part": {
-        "dc": "Malmédy-Spa-StavelotVred."
+        "dc": "Vred. Malmédy-Spa-Stavelot"
       }
     },
     "be:luik:luik:saint.nicolas.lez.liege": {
       "institution-part": {
-        "dc": "Saint-Nicolas-lez-LiègeVred."
+        "dc": "Vred. Saint-Nicolas-lez-Liège"
       }
     },
     "be:luik:luik:seraing": {
       "institution-part": {
-        "dc": "SeraingVred."
+        "dc": "Vred. Seraing"
       }
     },
     "be:luik:luik:sprimont": {
       "institution-part": {
-        "dc": "SprimontVred."
+        "dc": "Vred. Sprimont"
       }
     },
     "be:luik:luik:verviers": {
       "institution-part": {
-        "br": "VerviersBeslagr.",
-        "cc": "VerviersKh.",
-        "cfi": "VerviersRb.",
-        "corrc": "VerviersCorr.",
-        "dc": "VerviersVred.",
-        "famc": "VerviersFamrb.",
-        "juvc": "VerviersJeugdrb.",
-        "lc": "VerviersArbrb.",
-        "pc": "VerviersPol.",
-        "pres": "VerviersVoorz.",
-        "sentc": "VerviersSurb."
+        "br": "Beslagr. Verviers",
+        "cc": "Kh. Verviers",
+        "or": "Or. Verviers",
+        "cfi": "Rb. Verviers",
+        "corrc": "Corr. Verviers",
+        "dc": "Vred. Verviers",
+        "famc": "Famrb. Verviers",
+        "juvc": "Jeugdrb. Verviers",
+        "lc": "Arbrb Brussel (Fr.)",
+        "pc": "Pol. Verviers",
+        "pres": "KG Verviers",
+        "sentc": "Surb. Verviers"
       }
     },
     "be:luik:luik:wezet": {
       "institution-part": {
-        "dc": "WezetVred."
+        "dc": "Vred. Wezet"
       }
     },
     "be:luik:luxumburg": {
       "institution-part": {
-        "coass": "LuxumburgAssisen",
-        "lc": "LuxumburgArbrb.",
-        "lca": "LuxumburgArbh."
+        "coass": "Assisen Luxumburg",
+        "lc": "Arbrb Brussel (Fr.)",
+        "lca": "Arbh. Luxumburg"
       }
     },
     "be:luik:luxumburg:aarlen": {
       "institution-part": {
-        "cc": "AarlenKh.",
-        "cfi": "AarlenRb.",
-        "lc": "AarlenArbrb.",
-        "pc": "AarlenPol."
+        "cc": "Kh. Aarlen",
+        "or": "Or. Aarlen",
+        "cfi": "Rb. Aarlen",
+        "lc": "Arbrb Brussel (Fr.)",
+        "pc": "Pol. Aarlen"
       }
     },
     "be:luik:luxumburg:aarlen.messancy": {
       "institution-part": {
-        "dc": "Aarlen-MessancyVred."
+        "dc": "Vred. Aarlen-Messancy"
       }
     },
     "be:luik:luxumburg:bastenaken.neufchateau": {
       "institution-part": {
-        "dc": "Bastenaken-NeufchâteauVred."
+        "dc": "Vred. Bastenaken-Neufchâteau"
       }
     },
     "be:luik:luxumburg:marche.en.famenne": {
       "institution-part": {
-        "br": "Marche-en-FamenneBeslagr.",
-        "cc": "Marche-en-FamenneKh.",
-        "cfi": "Marche-en-FamenneRb.",
-        "corrc": "Marche-en-FamenneCorr.",
-        "famc": "Marche-en-FamenneFamrb.",
-        "juvc": "Marche-en-FamenneJeugdrb.",
-        "lc": "Marche-en-FamenneArbrb.",
-        "pc": "Marche-en-FamennePol.",
-        "pres": "Marche-en-FamenneVoorz.",
-        "sentc": "Marche-en-FamenneSurb."
+        "br": "Beslagr. Marche-en-Famenne",
+        "cc": "Kh. Marche-en-Famenne",
+        "or": "Or. Marche-en-Famenne",
+        "cfi": "Rb. Marche-en-Famenne",
+        "corrc": "Corr. Marche-en-Famenne",
+        "famc": "Famrb. Marche-en-Famenne",
+        "juvc": "Jeugdrb. Marche-en-Famenne",
+        "lc": "Arbrb Brussel (Fr.)",
+        "pc": "Pol. Marche-en-Famenne",
+        "pres": "KG Marche-en-Famenne",
+        "sentc": "Surb. Marche-en-Famenne"
       }
     },
     "be:luik:luxumburg:marche.en.famenne.durbuy": {
       "institution-part": {
-        "dc": "Marche-en-Famenne-DurbuyVred."
+        "dc": "Vred. Marche-en-Famenne-Durbuy"
       }
     },
     "be:luik:luxumburg:neufchateau": {
       "institution-part": {
-        "cc": "NeufchâteauKh.",
-        "cfi": "NeufchâteauRb.",
-        "lc": "NeufchâteauArbrb.",
-        "lca": "NeufchâteauArbh.",
-        "pc": "NeufchâteauPol."
+        "cc": "Kh. Neufchâteau",
+        "or": "Or. Neufchâteau",
+        "cfi": "Rb. Neufchâteau",
+        "lc": "Arbrb Brussel (Fr.)",
+        "lca": "Arbh. Neufchâteau",
+        "pc": "Pol. Neufchâteau"
       }
     },
     "be:luik:luxumburg:saint.hubert.bouillon.paliseul": {
       "institution-part": {
-        "dc": "Saint-Hubert-Bouillon-PaliseulVred."
+        "dc": "Vred. Saint-Hubert-Bouillon-Paliseul"
       }
     },
     "be:luik:luxumburg:vielsalm.la.roche.en.ardenne.houffalize": {
       "institution-part": {
-        "dc": "Vielsalm-La Roche en Ardenne-HouffalizeVred."
+        "dc": "Vred. Vielsalm-La Roche en Ardenne-Houffalize"
       }
     },
     "be:luik:luxumburg:virton.florenville.etalle": {
       "institution-part": {
-        "dc": "Virton-Florenville-EtalleVred."
+        "dc": "Vred. Virton-Florenville-Etalle"
       }
     },
     "be:luik:namen": {
       "institution-part": {
-        "coass": "NamenAssisen",
-        "lc": "NamenArbrb.",
-        "lca": "NamenArbh."
+        "coass": "Assisen Namen",
+        "lc": "Arbrb Brussel (Fr.)",
+        "lca": "Arbh. Namen"
       }
     },
     "be:luik:namen:andenne": {
       "institution-part": {
-        "dc": "AndenneVred."
+        "dc": "Vred. Andenne"
       }
     },
     "be:luik:namen:beauraing.dinant.gedinne": {
       "institution-part": {
-        "dc": "Beauraing-Dinant-GedinneVred."
+        "dc": "Vred. Beauraing-Dinant-Gedinne"
       }
     },
     "be:luik:namen:ciney.rochefort": {
       "institution-part": {
-        "dc": "Ciney-RochefortVred."
+        "dc": "Vred. Ciney-Rochefort"
       }
     },
     "be:luik:namen:dinant": {
       "institution-part": {
-        "br": "DinantBeslagr.",
-        "cc": "DinantKh.",
-        "cfi": "DinantRb.",
-        "corrc": "DinantCorr.",
-        "famc": "DinantFamrb.",
-        "juvc": "DinantJeugdrb.",
-        "lc": "DinantArbrb.",
-        "pc": "DinantPol.",
-        "pres": "DinantVoorz.",
-        "sentc": "DinantSurb."
+        "br": "Beslagr. Dinant",
+        "cc": "Kh. Dinant",
+        "or": "Or. Dinant",
+        "cfi": "Rb. Dinant",
+        "corrc": "Corr. Dinant",
+        "famc": "Famrb. Dinant",
+        "juvc": "Jeugdrb. Dinant",
+        "lc": "Arbrb Brussel (Fr.)",
+        "pc": "Pol. Dinant",
+        "pres": "KG Dinant",
+        "sentc": "Surb. Dinant"
       }
     },
     "be:luik:namen:fosses.la.ville": {
       "institution-part": {
-        "dc": "Fosses-la-VilleVred."
+        "dc": "Vred. Fosses-la-Ville"
       }
     },
     "be:luik:namen:gembloux.eghezee": {
       "institution-part": {
-        "dc": "Gembloux-EghezéeVred."
+        "dc": "Vred. Gembloux-Eghezée"
       }
     },
     "be:luik:namen:namen": {
       "institution-part": {
-        "br": "NamenBeslagr.",
-        "cfi": "NamenRb.",
-        "corrc": "NamenCorr.",
-        "dc": "NamenVred.",
-        "famc": "NamenFamrb.",
-        "juvc": "NamenJeugdrb.",
-        "pc": "NamenPol.",
-        "pres": "NamenVoorz.",
-        "sentc": "NamenSurb."
+        "br": "Beslagr. Namen",
+        "cfi": "Rb. Namen",
+        "corrc": "Corr. Namen",
+        "dc": "Vred. Namen",
+        "famc": "Famrb. Namen",
+        "juvc": "Jeugdrb. Namen",
+        "pc": "Pol. Namen",
+        "pres": "KG Namen",
+        "sentc": "Surb. Namen"
       }
     },
     "be:luik:namen:philippeville.couvin": {
       "institution-part": {
-        "dc": "Philippeville-CouvinVred."
+        "dc": "Vred. Philippeville-Couvin"
       }
     },
     "be:luik:namen:walcourt.florennes": {
       "institution-part": {
-        "dc": "Walcourt-FlorennesVred."
+        "dc": "Vred. Walcourt-Florennes"
       }
     }
   }

@@ -1,7 +1,7 @@
 {
   "filename": "auto-us.json",
   "name": "United States",
-  "version": "2026-07-08 20:45:39 UTC",
+  "version": "2026-07-22 20:44:53 UTC",
   "xdata": {
     "default": {
       "place": {
@@ -1129,11 +1129,11 @@
     "us:fed": {
       "institution-part": {
         "air.force.court.criminal.appeals": "A.F. Ct. Crim. App.",
-        "armed.services.board.contract.appeals": "A.S.B.C.A.",
-        "army.court.criminal.appeals": "Army Ct. Crim. App.",
+        "army.court.criminal.appeals": "A. Ct. Crim. App.",
         "attorney.general": "Att'y Gen.",
         "commerce.court": "Comm. Ct.",
         "court.appeals.armed.forces": "C.A.A.F.",
+        "armed.services.board.contract.appeals": "A.S.B.C.A.",
         "court.military.commission.review": "Ct. Mi. Comm'n Rev.",
         "courts.martial": "Ct. Martial",
         "emergency.court.appeals": "Emer. Ct. App.",
@@ -1144,7 +1144,18 @@
         "navy.marine.corps.court.criminal.appeals": "N.-M. Ct. Crim. App.",
         "special.court.regional.rail.reorganization.act": "Reg’l Rail Reorg. Ct.",
         "tax.court": "T.C.",
-        "temporary.emergency.court.appeals": "Temp. Emer. Ct. App."
+        "temporary.emergency.court.appeals": "Temp. Emer. Ct. App.",
+        "air.force.court.military.review": "A.F.C.M.R.",
+        "air.force.board.review": "A.F.B.R.",
+        "army.court.military.review": "A.C.M.R.",
+        "army.board.review": "A.B.R.",
+        "coast.guard.court.criminal.appeals": "C.G. Ct. Crim. App.",
+        "coast.guard.military.review": "C.G.M.R.",
+        "coast.guard.board.review": "C.G.B.R.",
+        "court.military.appeals": "C.M.A.",
+        "navy.marine.corps.court.military.review": "N.M.C.M.R.",
+        "navy.court.military.review": "N.C.M.R.",
+        "navy.board.review": "N.B.R."
       }
     },
     "us:fl": {

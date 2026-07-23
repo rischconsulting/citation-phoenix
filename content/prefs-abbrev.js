@@ -1,6 +1,7 @@
 (function () {
   let initialized = false;
   let initAttempts = 0;
+  let datasetLoadAttempts = 0;
   const HTML_NS = 'http://www.w3.org/1999/xhtml';
   const JOURNAL_DATASET_PREFIX = 'journals:';
   const ABBREVIATION_DATASET_PREFIX = 'abbrev:';
@@ -86,6 +87,15 @@
       dataset: row.dataset || String(row.value || '').split(':').slice(1).join(':'),
       isDefault: !!row.isDefault,
     })));
+  }
+
+  function hasLoadedDatasetOptions() {
+    const bridge = getBridge();
+    if (!bridge) return false;
+
+    return (bridge.listPrimaryDatasetOptions?.() || []).length
+      || (bridge.listSecondaryDatasetOptions?.() || []).length
+      || (bridge.listJurisdictionDatasetOptions?.() || []).length;
   }
 
   function isJournalMode() {
@@ -473,6 +483,7 @@
       renderRows([]);
       setStatus('Bridge unavailable. Restart Zotero after installing/updating the plugin.', true);
       debug('prefs pane refresh failed: bridge unavailable');
+      scheduleDatasetRefresh();
       return;
     }
 
@@ -495,6 +506,23 @@
     } else {
       setStatus(`Loaded ${rows.length} rows from ${dsLabel}.`, false);
     }
+
+    if (!hasLoadedDatasetOptions()) {
+      setStatus('Loading abbreviation datasets...', false);
+      scheduleDatasetRefresh();
+    } else {
+      datasetLoadAttempts = 0;
+    }
+  }
+
+  function scheduleDatasetRefresh() {
+    if (!initialized || hasLoadedDatasetOptions()) return;
+    datasetLoadAttempts += 1;
+    if (datasetLoadAttempts > 80) {
+      debug('prefs pane gave up waiting for abbreviation datasets');
+      return;
+    }
+    setTimeout(refresh, 100);
   }
 
   function handleAddOrUpdate() {

@@ -69,7 +69,7 @@
   },
   {
     "filename": "juris-be-map.json",
-    "name": "BelgiÃ«"
+    "name": "België"
   },
   {
     "filename": "juris-bf-map.json",
@@ -145,7 +145,7 @@
   },
   {
     "filename": "juris-ci-map.json",
-    "name": "CÃ´te d'Ivoire"
+    "name": "Côte d'Ivoire"
   },
   {
     "filename": "juris-ck-map.json",
@@ -254,6 +254,10 @@
   {
     "filename": "juris-eh-map.json",
     "name": "Western Sahara"
+  },
+  {
+    "filename": "juris-eporg.int-map.json",
+    "name": "Eporg.Int"
   },
   {
     "filename": "juris-er-map.json",
@@ -733,7 +737,7 @@
   },
   {
     "filename": "juris-sica.int-map.json",
-    "name": "Sistema de la IntegraciÃ³n Centroamericana"
+    "name": "Sistema de la Integración Centroamericana"
   },
   {
     "filename": "juris-sk-map.json",
@@ -761,7 +765,7 @@
   },
   {
     "filename": "juris-st-map.json",
-    "name": "SÃ£o TomÃ© and PrÃ­ncipe"
+    "name": "São Tomé and Príncipe"
   },
   {
     "filename": "juris-sv-map.json",
