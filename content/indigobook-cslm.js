@@ -42,10 +42,29 @@ var IndigoBookCSLM = (() => {
     async loadText(relPath) {
       if (this.cache.has(relPath)) return this.cache.get(relPath);
       const url = this.rootURI.spec + relPath;
-      const req = await Zotero.HTTP.request("GET", url);
-      const text = req.response;
+      const text = await this._loadURLText(url);
       this.cache.set(relPath, text);
       return text;
+    }
+    async _loadURLText(url) {
+      if (/^https?:/i.test(url)) {
+        const req = await Zotero.HTTP.request("GET", url);
+        return req.response;
+      }
+      return new Promise((resolve, reject) => {
+        const req = new XMLHttpRequest();
+        req.open("GET", url, true);
+        req.overrideMimeType?.("text/plain; charset=UTF-8");
+        req.onloadend = () => {
+          if (req.status === 0 || req.status >= 200 && req.status < 300) {
+            resolve(req.responseText);
+          } else {
+            reject(new Error(`Failed to load ${url}: ${req.status}`));
+          }
+        };
+        req.onerror = () => reject(new Error(`Failed to load ${url}`));
+        req.send(null);
+      });
     }
     async loadJSON(relPath) {
       if (this.cache.has(relPath)) return this.cache.get(relPath);

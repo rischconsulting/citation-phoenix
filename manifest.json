@@ -2,15 +2,15 @@
   "manifest_version": 2,
   "name": "citation-phoenix",
   "version": "0.8.0",
-  "description": "CSL-M module loading + Juris-M-style abbreviations for US legal citations.",
+  "description": "CSL-M module loading + Juris-M-style abbreviations for  legal citations.",
   "author": "Michael Risch",
   "icons": { "48": "content/ui/icon48.svg" },
   "applications": {
     "zotero": {
-      "id": "indigobook-phoenix@risch.example",
+      "id": "citation-phoenix@risch.example",
 	"update_url": "https://example.org/indigo-phoenix/updates.json",
       "strict_min_version": "8.0",
-      "strict_max_version": "9.*"
+      "strict_max_version": "10.*"
     }
   }
 }
