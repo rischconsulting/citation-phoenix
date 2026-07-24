@@ -16,12 +16,12 @@
 
   function debug(message) {
     try {
-      Zotero.debug(`[IndigoBook CSL-M] ${message}`);
+      Zotero.debug(`[Citation Phoenix] ${message}`);
     } catch (_) {}
   }
 
   function getBridge() {
-    return Zotero?.IndigoBookCSLMBridge || null;
+    return Zotero?.CitationPhoenixBridge || Zotero?.IndigoBookCSLMBridge || null;
   }
 
   function getDatasetSelection() {

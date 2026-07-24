@@ -39,7 +39,7 @@ Update-JsonIndex `
 
 # --- Build ---
 Write-Host "Building bundle..." -ForegroundColor Cyan
-& c:\esbuild\esbuild.exe lib\main.mjs --bundle --format=iife --global-name=IndigoBookCSLM --platform=browser --outfile=content\indigobook-cslm.js
+& c:\esbuild\esbuild.exe lib\main.mjs --bundle --format=iife --global-name=CitationPhoenix --platform=browser --outfile=content\citation-phoenix.js
 if ($LASTEXITCODE -ne 0) { throw "esbuild failed with exit code $LASTEXITCODE" }
 Write-Host "Build complete." -ForegroundColor Cyan
 
@@ -101,6 +101,7 @@ $filesToArchive = Get-ChildItem -Path $sourcePath -File -Recurse -Force |
         if ($rel -match '^(jurism-zotero[\\/]|juris-source-cache[\\/]|_old_versions[\\/])') { return $false }
         if ($rel -match '^scripts[\\/]sync-juris-assets-(backup[\\/]|report\.json$)') { return $false }
         if ($rel -ieq $zipName -or $rel -ieq $xpiName) { return $false }
+        if ($_.Extension -ieq '.xpi') { return $false }
 
         # Exclude script helpers from package
         if ($_.Extension -ieq '.ps1' -or $_.Extension -ieq '.bat') { return $false }

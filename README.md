@@ -1,4 +1,4 @@
-# Citation-Phoenix (Zotero 8, 9) - v0.8.0
+# Citation-Phoenix (Zotero 8, 9, 10) - v0.8.1
 
 Now multi-jurisdictional.
 
@@ -90,7 +90,7 @@ Normalization behavior:
 
 ### Preferences Panel Overview
 
-The plugin registers a Zotero preferences pane labeled `IndigoBook CSL-M`.
+The plugin registers a Zotero preferences pane labeled `Citation Phoenix`.
 
 Pane location and assets:
 
@@ -115,11 +115,11 @@ The panel supports two working modes via dataset selection:
 ### How Overrides Are Stored
 
 - Journal overrides are persisted in pref key:
-	- `extensions.indigobook-cslm.secondaryContainerTitleOverrides`
+	- `extensions.citation-phoenix.secondaryContainerTitleOverrides`
 - Jurisdiction overrides are persisted in pref key:
-	- `extensions.indigobook-cslm.jurisdictionOverrides`
+	- `extensions.citation-phoenix.jurisdictionOverrides`
 
-These persisted overrides are exposed through `Zotero.IndigoBookCSLMBridge` and are applied at citation time by the abbreviation service.
+These persisted overrides are exposed through `Zotero.CitationPhoenixBridge` and are applied at citation time by the abbreviation service.
 
 ## Build And Package
 
@@ -139,7 +139,7 @@ Use this to regenerate only the runtime bundle:
 
 This rebuilds:
 
-- `content/indigobook-cslm.js`
+- `content/citation-phoenix.js`
 
 ### Canonical Build + Package
 
@@ -151,7 +151,7 @@ Use this as the main workflow:
 
 What it does:
 
-1. Builds `content/indigobook-cslm.js` with esbuild.
+1. Builds `content/citation-phoenix.js` with esbuild.
 2. Creates a package name from `manifest.json` (`name` + `version`) when available.
 3. Archives plugin files while excluding helper scripts (`.ps1`, `.bat`) and VCS output artifacts.
 4. Produces a final `.xpi` in the project root.
@@ -238,7 +238,7 @@ Install the generated `.xpi` in Zotero's add-ons UI.
 - `data/` remains as a compatibility fallback for older path references.
 - `lib/` contains source modules.
 - `scripts/sync-juris-assets.ps1` keeps the folder layout aligned with Juris-M-style sources.
-- `content/indigobook-cslm.js` is the bundled runtime script loaded by `bootstrap.js`.
+- `content/citation-phoenix.js` is the bundled runtime script loaded by `bootstrap.js`.
 ### Lightweight Regression Harnesses
 
 Run these from the repository root with Node:
