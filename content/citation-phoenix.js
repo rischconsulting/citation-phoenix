@@ -1,4 +1,4 @@
-var IndigoBookCSLM = (() => {
+var CitationPhoenix = (() => {
   var __defProp = Object.defineProperty;
   var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
   var __getOwnPropNames = Object.getOwnPropertyNames;
@@ -756,9 +756,11 @@ ${mlzBlock}` : mlzBlock;
       this._primaryJur = null;
       this._defaultJurisdiction = "us";
       this._userSecondaryOverrides = {};
-      this._secondaryOverridesPref = "extensions.indigobook-cslm.secondaryContainerTitleOverrides";
+      this._secondaryOverridesPref = "extensions.citation-phoenix.secondaryContainerTitleOverrides";
+      this._legacySecondaryOverridesPref = "extensions.indigobook-cslm.secondaryContainerTitleOverrides";
       this._userJurisdictionOverrides = {};
-      this._jurisdictionOverridesPref = "extensions.indigobook-cslm.jurisdictionOverrides";
+      this._jurisdictionOverridesPref = "extensions.citation-phoenix.jurisdictionOverrides";
+      this._legacyJurisdictionOverridesPref = "extensions.indigobook-cslm.jurisdictionOverrides";
     }
     async preload() {
       const listing = await this.dataStore.loadJSON("juris-abbrevs/DIRECTORY_LISTING.json");
@@ -1944,7 +1946,7 @@ ${mlzBlock}` : mlzBlock;
     }
     _loadSecondaryOverrides() {
       try {
-        const raw = Zotero?.Prefs?.get?.(this._secondaryOverridesPref);
+        const raw = Zotero?.Prefs?.get?.(this._secondaryOverridesPref) || Zotero?.Prefs?.get?.(this._legacySecondaryOverridesPref);
         if (!raw) return {};
         const parsed = JSON.parse(raw);
         if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
@@ -2137,7 +2139,7 @@ ${mlzBlock}` : mlzBlock;
     }
     _loadJurisdictionOverrides() {
       try {
-        const raw = Zotero?.Prefs?.get?.(this._jurisdictionOverridesPref);
+        const raw = Zotero?.Prefs?.get?.(this._jurisdictionOverridesPref) || Zotero?.Prefs?.get?.(this._legacyJurisdictionOverridesPref);
         if (!raw) return {};
         const parsed = JSON.parse(raw);
         if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
@@ -2434,7 +2436,7 @@ ${mlzBlock}` : mlzBlock;
             try {
               const itemID = this.item?.id;
               const customRows = this.querySelectorAll?.("[data-custom-row-id]")?.length || 0;
-              Zotero.debug(`[IndigoBook CSL-M] info-box proto render: item=${String(itemID || "")} customRows=${String(customRows)}`);
+              Zotero.debug(`[Citation Phoenix] info-box proto render: item=${String(itemID || "")} customRows=${String(customRows)}`);
             } catch (e) {
             }
             self._ensureExtraPersonMenuItems(this);
@@ -2443,7 +2445,7 @@ ${mlzBlock}` : mlzBlock;
             self._refreshCustomInfoRows(this);
           } catch (e) {
             try {
-              Zotero.debug(`[IndigoBook CSL-M] info-box commenter render patch failed: ${String(e)}`);
+              Zotero.debug(`[Citation Phoenix] info-box commenter render patch failed: ${String(e)}`);
             } catch (_) {
             }
           }
@@ -2501,7 +2503,7 @@ ${mlzBlock}` : mlzBlock;
       this._itemObserverID = Zotero.Notifier.registerObserver({
         async notify(event, type, ids) {
           try {
-            Zotero.debug(`[IndigoBook CSL-M] case reporter sync notifier: event=${String(event)} type=${String(type)} ids=${Array.isArray(ids) ? ids.length : 0}`);
+            Zotero.debug(`[Citation Phoenix] case reporter sync notifier: event=${String(event)} type=${String(type)} ids=${Array.isArray(ids) ? ids.length : 0}`);
           } catch (e) {
           }
           const isSyncEvent = ["add", "modify", "refresh", "redraw", "select"].includes(event);
@@ -2523,7 +2525,7 @@ ${mlzBlock}` : mlzBlock;
           }
           await self._syncCaseReporterFromActiveSelection();
         }
-      }, ["item", "itempane", "tab"], "indigobook-cslm-case-reporter-sync");
+      }, ["item", "itempane", "tab"], "citation-phoenix-case-reporter-sync");
     }
     _patchNewItemMenus() {
       const mainWindow = Zotero.getMainWindow?.();
@@ -2540,7 +2542,7 @@ ${mlzBlock}` : mlzBlock;
           self._augmentAnyNewItemPopup(event?.target || null);
         } catch (e) {
           try {
-            Zotero.debug(`[IndigoBook CSL-M] new item popup patch failed: ${String(e)}`);
+            Zotero.debug(`[Citation Phoenix] new item popup patch failed: ${String(e)}`);
           } catch (_) {
           }
         }
@@ -2570,7 +2572,7 @@ ${mlzBlock}` : mlzBlock;
             self._augmentKnownNewItemPopups(doc, "toolbar");
           } catch (e) {
             try {
-              Zotero.debug(`[IndigoBook CSL-M] toolbar new-item patch failed: ${String(e)}`);
+              Zotero.debug(`[Citation Phoenix] toolbar new-item patch failed: ${String(e)}`);
             } catch (_) {
             }
           }
@@ -2595,7 +2597,7 @@ ${mlzBlock}` : mlzBlock;
             self._augmentKnownNewItemPopups(doc, "file-menu");
           } catch (e) {
             try {
-              Zotero.debug(`[IndigoBook CSL-M] file-menu new-item patch failed: ${String(e)}`);
+              Zotero.debug(`[Citation Phoenix] file-menu new-item patch failed: ${String(e)}`);
             } catch (_) {
             }
           }
@@ -2802,7 +2804,7 @@ ${mlzBlock}` : mlzBlock;
       }
       this._scheduleActiveInfoPaneRefresh(0, true);
       try {
-        Zotero.debug(`[IndigoBook CSL-M] created custom new-item type: item=${String(item.id || "")} native=${nativeType} custom=${customItemType}`);
+        Zotero.debug(`[Citation Phoenix] created custom new-item type: item=${String(item.id || "")} native=${nativeType} custom=${customItemType}`);
       } catch (e) {
       }
       return item;
@@ -2853,7 +2855,7 @@ ${mlzBlock}` : mlzBlock;
       item.setField("extra", nextExtra);
       await item.saveTx({ skipDateModifiedUpdate: true });
       try {
-        Zotero.debug(`[IndigoBook CSL-M] applied custom new-item type: item=${String(item.id || "")} native=${nativeItemType} custom=${match.itemType}`);
+        Zotero.debug(`[Citation Phoenix] applied custom new-item type: item=${String(item.id || "")} native=${nativeItemType} custom=${match.itemType}`);
       } catch (e) {
       }
       return true;
@@ -2873,14 +2875,14 @@ ${mlzBlock}` : mlzBlock;
           const itemID = this.item?.id;
           if (itemID != null) {
             try {
-              Zotero.debug(`[IndigoBook CSL-M] case reporter item-pane render sync: item=${String(itemID)}`);
+              Zotero.debug(`[Citation Phoenix] case reporter item-pane render sync: item=${String(itemID)}`);
             } catch (e) {
             }
             await self._syncItemFromFieldsAndMLZ(itemID);
           }
         } catch (e) {
           try {
-            Zotero.debug(`[IndigoBook CSL-M] case reporter item-pane render sync failed: ${String(e)}`);
+            Zotero.debug(`[Citation Phoenix] case reporter item-pane render sync failed: ${String(e)}`);
           } catch (_) {
           }
         }
@@ -2905,7 +2907,7 @@ ${mlzBlock}` : mlzBlock;
           try {
             const itemID = this.item?.id;
             const customRows = this.querySelectorAll?.("[data-custom-row-id]")?.length || 0;
-            Zotero.debug(`[IndigoBook CSL-M] info-box instance render: item=${String(itemID || "")} customRows=${String(customRows)}`);
+            Zotero.debug(`[Citation Phoenix] info-box instance render: item=${String(itemID || "")} customRows=${String(customRows)}`);
           } catch (e) {
           }
           self._ensureExtraPersonMenuItems(this);
@@ -2914,7 +2916,7 @@ ${mlzBlock}` : mlzBlock;
           self._refreshCustomInfoRows(this);
         } catch (e) {
           try {
-            Zotero.debug(`[IndigoBook CSL-M] custom info row render failed: ${String(e)}`);
+            Zotero.debug(`[Citation Phoenix] custom info row render failed: ${String(e)}`);
           } catch (_) {
           }
         }
@@ -3036,7 +3038,7 @@ ${mlzBlock}` : mlzBlock;
       const inferredJurisdiction = mappedJurisdiction || derivedJurisdiction;
       const upgradedCourt = this._upgradeGenericCourtKey(court, inferredJurisdiction);
       try {
-        Zotero.debug(`[IndigoBook CSL-M] case court mapping: raw="${rawCourt}" mappedCourt="${mappedCourt}" mappedJurisdiction="${mappedJurisdiction}" derivedJurisdiction="${derivedJurisdiction}" inferredJurisdiction="${inferredJurisdiction}" upgradedCourt="${upgradedCourt}"`);
+        Zotero.debug(`[Citation Phoenix] case court mapping: raw="${rawCourt}" mappedCourt="${mappedCourt}" mappedJurisdiction="${mappedJurisdiction}" derivedJurisdiction="${derivedJurisdiction}" inferredJurisdiction="${inferredJurisdiction}" upgradedCourt="${upgradedCourt}"`);
       } catch (e) {
       }
       let nextExtra = extra;
@@ -3074,7 +3076,7 @@ ${mlzBlock}` : mlzBlock;
       if (!changed) return false;
       await item.saveTx({ skipDateModifiedUpdate: true });
       try {
-        Zotero.debug(`[IndigoBook CSL-M] case sync: wrote reporter/jurisdiction/court mlz state (item ${String(itemID)})`);
+        Zotero.debug(`[Citation Phoenix] case sync: wrote reporter/jurisdiction/court mlz state (item ${String(itemID)})`);
       } catch (e) {
       }
       return true;
@@ -3094,7 +3096,7 @@ ${mlzBlock}` : mlzBlock;
         } catch (_) {
         }
         try {
-          Zotero.debug(`[IndigoBook CSL-M] item sync failed for item ${normalizedID}: ${String(e)}`);
+          Zotero.debug(`[Citation Phoenix] item sync failed for item ${normalizedID}: ${String(e)}`);
         } catch (_) {
         }
         return false;
@@ -3116,7 +3118,7 @@ ${mlzBlock}` : mlzBlock;
       item.setField("extra", nextExtra);
       await item.saveTx({ skipDateModifiedUpdate: true });
       try {
-        Zotero.debug(`[IndigoBook CSL-M] cleared stale custom item type: item=${String(item.id || "")} native=${nativeItemType} stale=${storedItemType}`);
+        Zotero.debug(`[Citation Phoenix] cleared stale custom item type: item=${String(item.id || "")} native=${nativeItemType} stale=${storedItemType}`);
       } catch (e) {
       }
       return true;
@@ -3196,7 +3198,7 @@ ${mlzBlock}` : mlzBlock;
         }
       } catch (e) {
         try {
-          Zotero.debug(`[IndigoBook CSL-M] case reporter selection sync failed: ${String(e)}`);
+          Zotero.debug(`[Citation Phoenix] case reporter selection sync failed: ${String(e)}`);
         } catch (_) {
         }
       }
@@ -3268,14 +3270,14 @@ ${mlzBlock}` : mlzBlock;
         }
         this._removeExtraPersonCreatorRows(infoBox, extraPersonType);
         try {
-          Zotero.debug(`[IndigoBook CSL-M] ${extraPersonType.key} creator row skipped: item=${String(item?.id || "")} no stored value`);
+          Zotero.debug(`[Citation Phoenix] ${extraPersonType.key} creator row skipped: item=${String(item?.id || "")} no stored value`);
         } catch (e) {
         }
         return;
       }
       if (typeof infoBox.addCreatorRow !== "function") {
         try {
-          Zotero.debug(`[IndigoBook CSL-M] ${extraPersonType.key} creator row skipped: item=${String(item?.id || "")} addCreatorRow unavailable`);
+          Zotero.debug(`[Citation Phoenix] ${extraPersonType.key} creator row skipped: item=${String(item?.id || "")} addCreatorRow unavailable`);
         } catch (e) {
         }
         return;
@@ -3295,7 +3297,7 @@ ${mlzBlock}` : mlzBlock;
       this._markExtraPersonCreatorRow(row, extraPersonType);
       row.setAttribute("data-ibcslm-rendered-extra-person-row", extraPersonType.key);
       try {
-        Zotero.debug(`[IndigoBook CSL-M] ${extraPersonType.key} creator row rendered: item=${String(item?.id || "")} rowIndex=${String(rowIndex)}`);
+        Zotero.debug(`[Citation Phoenix] ${extraPersonType.key} creator row rendered: item=${String(item?.id || "")} rowIndex=${String(rowIndex)}`);
       } catch (e) {
       }
     }
@@ -3452,7 +3454,7 @@ ${mlzBlock}` : mlzBlock;
     _removeCommenterField(infoBox) {
       const row = infoBox?.querySelector?.(`#${this._commenterRowID}`);
       if (row?.parentNode) row.parentNode.removeChild(row);
-      for (const customRow of infoBox?.querySelectorAll?.('[data-custom-row-id$="indigobook-cslm-commenter-row"]') || []) {
+      for (const customRow of infoBox?.querySelectorAll?.('[data-custom-row-id$="citation-phoenix-commenter-row"]') || []) {
         customRow.parentNode?.removeChild(customRow);
       }
     }
@@ -4181,7 +4183,7 @@ ${mlzBlock}` : mlzBlock;
         await item.saveTx({ skipDateModifiedUpdate: true });
         this._scheduleActiveInfoPaneRefresh(75, true);
         try {
-          Zotero.debug(`[IndigoBook CSL-M] jurisdiction row saved: item=${String(item.id)} jurisdiction=${selectedCode}`);
+          Zotero.debug(`[Citation Phoenix] jurisdiction row saved: item=${String(item.id)} jurisdiction=${selectedCode}`);
         } catch (e) {
         }
       } catch (e) {
@@ -4190,7 +4192,7 @@ ${mlzBlock}` : mlzBlock;
         } catch (_) {
         }
         try {
-          Zotero.debug(`[IndigoBook CSL-M] jurisdiction row save failed: ${String(e)}`);
+          Zotero.debug(`[Citation Phoenix] jurisdiction row save failed: ${String(e)}`);
         } catch (_) {
         }
       }
@@ -4218,7 +4220,7 @@ ${mlzBlock}` : mlzBlock;
             await item.saveTx({ skipDateModifiedUpdate: true });
             this._scheduleActiveInfoPaneRefresh(75, true);
             try {
-              Zotero.debug(`[IndigoBook CSL-M] court row cleared for jurisdiction with no institution-part: item=${String(item.id)} jurisdiction=${targetJurisdiction}`);
+              Zotero.debug(`[Citation Phoenix] court row cleared for jurisdiction with no institution-part: item=${String(item.id)} jurisdiction=${targetJurisdiction}`);
             } catch (e) {
             }
             return;
@@ -4228,7 +4230,7 @@ ${mlzBlock}` : mlzBlock;
         await item.saveTx({ skipDateModifiedUpdate: true });
         this._scheduleActiveInfoPaneRefresh(75, true);
         try {
-          Zotero.debug(`[IndigoBook CSL-M] court row saved: item=${String(item.id)} court=${normalizedKey} jurisdiction=${targetJurisdiction || "unchanged"}`);
+          Zotero.debug(`[Citation Phoenix] court row saved: item=${String(item.id)} court=${normalizedKey} jurisdiction=${targetJurisdiction || "unchanged"}`);
         } catch (e) {
         }
       } catch (e) {
@@ -4237,7 +4239,7 @@ ${mlzBlock}` : mlzBlock;
         } catch (_) {
         }
         try {
-          Zotero.debug(`[IndigoBook CSL-M] court row save failed: ${String(e)}`);
+          Zotero.debug(`[Citation Phoenix] court row save failed: ${String(e)}`);
         } catch (_) {
         }
       }
@@ -4563,7 +4565,7 @@ ${mlzBlock}` : mlzBlock;
         await item.saveTx({ skipDateModifiedUpdate: true });
         this._scheduleActiveInfoPaneRefresh(75, true);
         try {
-          Zotero.debug(`[IndigoBook CSL-M] item type saved: item=${String(item.id || "")} native=${targetNativeType} custom=${targetCustomType || "(none)"}`);
+          Zotero.debug(`[Citation Phoenix] item type saved: item=${String(item.id || "")} native=${targetNativeType} custom=${targetCustomType || "(none)"}`);
         } catch (e) {
         }
       } catch (e) {
@@ -4572,7 +4574,7 @@ ${mlzBlock}` : mlzBlock;
         } catch (_) {
         }
         try {
-          Zotero.debug(`[IndigoBook CSL-M] item type save failed: ${String(e)}`);
+          Zotero.debug(`[Citation Phoenix] item type save failed: ${String(e)}`);
         } catch (_) {
         }
       }
@@ -5320,7 +5322,7 @@ ${mlzBlock}` : mlzBlock;
           mlzEnd: parsed?.end ?? null,
           sanitizedNote: sanitizedNote ?? null
         };
-        const msg = `[IndigoBook CSL-M] sanitize note: ${JSON.stringify(payload)}`;
+        const msg = `[Citation Phoenix] sanitize note: ${JSON.stringify(payload)}`;
         Zotero.debug(msg);
         Zotero.logError(msg);
       } catch (e) {
@@ -5451,7 +5453,7 @@ ${mlzBlock}` : mlzBlock;
     _logShortForm(category, source, value, stage) {
       if (this._shortFormLogCount >= this._maxShortFormLogs) return;
       this._shortFormLogCount += 1;
-      const msg = `[IndigoBook CSL-M] shortForm[${this._shortFormLogCount}] ${stage}: category=${category} source=${String(source)} value=${String(value)}`;
+      const msg = `[Citation Phoenix] shortForm[${this._shortFormLogCount}] ${stage}: category=${category} source=${String(source)} value=${String(value)}`;
       try {
         Zotero.debug(msg);
       } catch (e) {
@@ -5460,7 +5462,7 @@ ${mlzBlock}` : mlzBlock;
     _logField(stage, detail) {
       if (this._fieldLogCount >= this._maxFieldLogs) return;
       this._fieldLogCount += 1;
-      const msg = `[IndigoBook CSL-M] field[${this._fieldLogCount}] ${stage}: ${detail}`;
+      const msg = `[Citation Phoenix] field[${this._fieldLogCount}] ${stage}: ${detail}`;
       try {
         Zotero.debug(msg);
       } catch (e) {
@@ -5474,7 +5476,7 @@ ${mlzBlock}` : mlzBlock;
       try {
         const source = String(cslItem?.["container-title"] || "");
         if (!this._isHarvardCRCL(source)) return;
-        const msg = `[IndigoBook CSL-M] renderProbe item(${stage}): jur=${String(jur)} type=${String(cslItem?.type || "")} container-title=${source} container-title-short=${String(cslItem?.["container-title-short"] || "")} title=${String(cslItem?.title || "")} title-short=${String(cslItem?.["title-short"] || "")}`;
+        const msg = `[Citation Phoenix] renderProbe item(${stage}): jur=${String(jur)} type=${String(cslItem?.type || "")} container-title=${source} container-title-short=${String(cslItem?.["container-title-short"] || "")} title=${String(cslItem?.title || "")} title-short=${String(cslItem?.["title-short"] || "")}`;
         Zotero.debug(msg);
         Zotero.logError(msg);
       } catch (e) {
@@ -5485,7 +5487,7 @@ ${mlzBlock}` : mlzBlock;
         if (category !== "container-title") return;
         if (!this._isHarvardCRCL(key)) return;
         const normalized = this.abbrevService.normalizeKey(key || "");
-        const msg = `[IndigoBook CSL-M] renderProbe abbr(${stage}): category=${String(category)} jur=${String(jurisdiction)} noHints=${String(!!noHints)} key=${String(key)} normalized=${normalized}`;
+        const msg = `[Citation Phoenix] renderProbe abbr(${stage}): category=${String(category)} jur=${String(jurisdiction)} noHints=${String(!!noHints)} key=${String(key)} normalized=${normalized}`;
         Zotero.debug(msg);
         Zotero.logError(msg);
       } catch (e) {
@@ -5505,7 +5507,7 @@ ${mlzBlock}` : mlzBlock;
       this._retrieveItemLogCount += 1;
       const inType = Array.isArray(inputID) ? "array" : typeof inputID;
       const outType = Array.isArray(outputID) ? "array" : typeof outputID;
-      const msg = `[IndigoBook CSL-M] retrieveItem[${this._retrieveItemLogCount}] ${stage}: inputID(${inType})=${String(inputID)} => cslItem.id(${outType})=${String(outputID)}`;
+      const msg = `[Citation Phoenix] retrieveItem[${this._retrieveItemLogCount}] ${stage}: inputID(${inType})=${String(inputID)} => cslItem.id(${outType})=${String(outputID)}`;
       try {
         Zotero.debug(msg);
       } catch (e) {
@@ -5519,7 +5521,7 @@ ${mlzBlock}` : mlzBlock;
       if (this._didWarnRetrieveItem) return;
       this._didWarnRetrieveItem = true;
       try {
-        Zotero.debug(`[IndigoBook CSL-M] retrieveItem patch warning: ${reason}`);
+        Zotero.debug(`[Citation Phoenix] retrieveItem patch warning: ${reason}`);
       } catch (e) {
       }
     }
@@ -5612,7 +5614,7 @@ ${mlzBlock}` : mlzBlock;
     _logAbbreviation(category, key, jurisdiction, value, stage) {
       if (this._abbrevLogCount >= this._maxAbbrevLogs) return;
       this._abbrevLogCount += 1;
-      const msg = `[IndigoBook CSL-M] getAbbreviation[${this._abbrevLogCount}] ${stage}: category=${category} jurisdiction=${jurisdiction} key=${String(key)} value=${String(value)}`;
+      const msg = `[Citation Phoenix] getAbbreviation[${this._abbrevLogCount}] ${stage}: category=${category} jurisdiction=${jurisdiction} key=${String(key)} value=${String(value)}`;
       try {
         Zotero.debug(msg);
       } catch (e) {
@@ -5662,7 +5664,7 @@ ${mlzBlock}` : mlzBlock;
           if (baseUS) {
             effectiveXML = baseUS;
             try {
-              Zotero.debug("[IndigoBook CSL-M] Replaced empty IndigoTemp citation layout with base juris-us.csl");
+              Zotero.debug("[Citation Phoenix] Replaced empty IndigoTemp citation layout with base juris-us.csl");
             } catch (e) {
             }
           }
@@ -5702,7 +5704,7 @@ ${mlzBlock}` : mlzBlock;
           "updateItems"
         ];
         const available = methodList.filter((name) => typeof citeproc[name] === "function").join(",");
-        Zotero.debug(`[IndigoBook CSL-M] renderProbe citeproc instrumentation: methods=${available || "none"}`);
+        Zotero.debug(`[Citation Phoenix] renderProbe citeproc instrumentation: methods=${available || "none"}`);
       } catch (e) {
       }
       this._instrumentParallelTracker(citeproc);
@@ -5762,7 +5764,7 @@ ${mlzBlock}` : mlzBlock;
         const parallelEnabled = citeproc?.opt?.parallel?.enable;
         const trackRepeat = Object.keys(citeproc?.opt?.track_repeat || {});
         const hasParallelTracker = !!citeproc?.parallel;
-        const msg = `[IndigoBook CSL-M] citeproc engine: ctor=${ctorName} citeprocRsPref=${String(!!prefRs)} hasParallelTracker=${String(hasParallelTracker)} parallelEnabled=${String(!!parallelEnabled)} trackRepeat=${trackRepeat.join("|") || "none"}`;
+        const msg = `[Citation Phoenix] citeproc engine: ctor=${ctorName} citeprocRsPref=${String(!!prefRs)} hasParallelTracker=${String(hasParallelTracker)} parallelEnabled=${String(!!parallelEnabled)} trackRepeat=${trackRepeat.join("|") || "none"}`;
         Zotero.debug(msg);
         Zotero.logError(msg);
       } catch (e) {
@@ -5779,7 +5781,7 @@ ${mlzBlock}` : mlzBlock;
         } else if (stage.endsWith(":after")) {
           tail = ` result=${this._summarizeParallelLifecycleResult(resultOrError)}`;
         }
-        const msg = `[IndigoBook CSL-M] citeproc parallel lifecycle(${stage}): enabled=${String(!!parallel.enable)} parallelKeys=${Object.keys(parallel).join("|") || "none"} trackRepeat=${trackRepeat.join("|") || "none"} ${argSummary}${tail}`;
+        const msg = `[Citation Phoenix] citeproc parallel lifecycle(${stage}): enabled=${String(!!parallel.enable)} parallelKeys=${Object.keys(parallel).join("|") || "none"} trackRepeat=${trackRepeat.join("|") || "none"} ${argSummary}${tail}`;
         Zotero.debug(msg);
         Zotero.logError(msg);
       } catch (e) {
@@ -5822,7 +5824,7 @@ ${mlzBlock}` : mlzBlock;
         const hasParallelLast = /parallel-last\s*=/.test(xml);
         const hasParallelLastToFirst = /parallel-last-to-first\s*=/.test(xml);
         const hasParallelDelimiter = /parallel-delimiter-override\s*=/.test(xml);
-        const msg = `[IndigoBook CSL-M] jurisdiction module(${hookName}): jurisdiction=${String(jurisdiction || "")} variant=${String(variantName || "")} parallel-first=${String(hasParallelFirst)} parallel-last=${String(hasParallelLast)} parallel-last-to-first=${String(hasParallelLastToFirst)} parallel-delimiter=${String(hasParallelDelimiter)}`;
+        const msg = `[Citation Phoenix] jurisdiction module(${hookName}): jurisdiction=${String(jurisdiction || "")} variant=${String(variantName || "")} parallel-first=${String(hasParallelFirst)} parallel-last=${String(hasParallelLast)} parallel-last-to-first=${String(hasParallelLastToFirst)} parallel-delimiter=${String(hasParallelDelimiter)}`;
         Zotero.debug(msg);
         Zotero.logError(msg);
       } catch (e) {
@@ -5842,7 +5844,7 @@ ${mlzBlock}` : mlzBlock;
           if (pos === 2 || pos === "ibid-with-locator") branch = "ibid-with-locator";
           else if (pos === 1 || pos === "ibid") branch = "ibid";
           else if (nearNote || pos === 3 || pos === "subsequent") branch = "short";
-          const msg = `[IndigoBook CSL-M] renderProbe citeproc(${methodName}): branch=${branch} position=${String(pos)} near-note=${String(nearNote)} locator=${String(citationItem?.locator || "")} label=${label} has-locator=${String(hasLocator)} itemID=${String(itemID)}`;
+          const msg = `[Citation Phoenix] renderProbe citeproc(${methodName}): branch=${branch} position=${String(pos)} near-note=${String(nearNote)} locator=${String(citationItem?.locator || "")} label=${label} has-locator=${String(hasLocator)} itemID=${String(itemID)}`;
           Zotero.debug(msg);
           Zotero.logError(msg);
         }
@@ -5864,7 +5866,7 @@ ${mlzBlock}` : mlzBlock;
         const items = this._extractCitationItems(args?.[0]);
         this._logCitationRequestPayload(methodName, items, args);
         const ids = items.map((citationItem) => citationItem?.id ?? citationItem?.itemID ?? citationItem?.itemId ?? null).filter((id) => id != null).map((id) => String(id)).join(",");
-        Zotero.debug(`[IndigoBook CSL-M] renderProbe citeproc start(${methodName}): args=${String(args?.length || 0)} ids=${ids || "none"}`);
+        Zotero.debug(`[Citation Phoenix] renderProbe citeproc start(${methodName}): args=${String(args?.length || 0)} ids=${ids || "none"}`);
       } catch (e) {
       }
     }
@@ -5875,13 +5877,13 @@ ${mlzBlock}` : mlzBlock;
         if (result && typeof result === "object" && !Array.isArray(result)) {
           shape = `object(${Object.keys(result).slice(0, 6).join("|")})`;
         }
-        Zotero.debug(`[IndigoBook CSL-M] renderProbe citeproc end(${methodName}): result=${shape}`);
+        Zotero.debug(`[Citation Phoenix] renderProbe citeproc end(${methodName}): result=${shape}`);
       } catch (e) {
       }
     }
     _logCiteprocMethodError(methodName, error) {
       try {
-        const msg = `[IndigoBook CSL-M] renderProbe citeproc error(${methodName}): ${String(error)} stack=${String(error?.stack || "")}`;
+        const msg = `[Citation Phoenix] renderProbe citeproc error(${methodName}): ${String(error)} stack=${String(error?.stack || "")}`;
         Zotero.debug(msg);
         Zotero.logError(msg);
       } catch (e) {
@@ -5925,7 +5927,7 @@ ${mlzBlock}` : mlzBlock;
           "title-short": cslItem?.["title-short"] ?? null,
           seeAlso: Array.isArray(cslItem?.seeAlso) ? cslItem.seeAlso : []
         };
-        const msg = `[IndigoBook CSL-M] citation itemData[${this._citationDataLogCount}] ${stage}: ${JSON.stringify(payload)}`;
+        const msg = `[Citation Phoenix] citation itemData[${this._citationDataLogCount}] ${stage}: ${JSON.stringify(payload)}`;
         Zotero.debug(msg);
         Zotero.logError(msg);
       } catch (e) {
@@ -5944,7 +5946,7 @@ ${mlzBlock}` : mlzBlock;
           prefix: citationItem?.prefix ?? null,
           suffix: citationItem?.suffix ?? null
         }));
-        const msg = `[IndigoBook CSL-M] citation request(${methodName}): items=${JSON.stringify(payload)} arg-shape=${String(args?.length || 0)}`;
+        const msg = `[Citation Phoenix] citation request(${methodName}): items=${JSON.stringify(payload)} arg-shape=${String(args?.length || 0)}`;
         Zotero.debug(msg);
         Zotero.logError(msg);
       } catch (e) {
@@ -5969,7 +5971,7 @@ ${mlzBlock}` : mlzBlock;
           }
         }));
         const suppressRepeats = Array.isArray(state?.tmp?.suppress_repeats) ? state.tmp.suppress_repeats : [];
-        const msg = `[IndigoBook CSL-M] parallel StartCitation: sortedItems=${JSON.stringify(payload)} suppressRepeats=${JSON.stringify(suppressRepeats)}`;
+        const msg = `[Citation Phoenix] parallel StartCitation: sortedItems=${JSON.stringify(payload)} suppressRepeats=${JSON.stringify(suppressRepeats)}`;
         Zotero.debug(msg);
         Zotero.logError(msg);
       } catch (e) {
@@ -6012,7 +6014,7 @@ ${mlzBlock}` : mlzBlock;
       if (this._didWarnNoSyncStyleRead) return;
       this._didWarnNoSyncStyleRead = true;
       try {
-        Zotero.debug(`[IndigoBook CSL-M] Sync style fallback unavailable: ${reason}. Preload style XML during activation.`);
+        Zotero.debug(`[Citation Phoenix] Sync style fallback unavailable: ${reason}. Preload style XML during activation.`);
       } catch (e) {
       }
     }
@@ -6068,7 +6070,7 @@ ${mlzBlock}` : mlzBlock;
         });
         this._paneID = pane?.id || pane || null;
         try {
-          Zotero.debug(`[IndigoBook CSL-M] prefs pane registered: paneID=${String(this._paneID)}`);
+          Zotero.debug(`[Citation Phoenix] prefs pane registered: paneID=${String(this._paneID)}`);
         } catch (_) {
         }
       } catch (e) {
@@ -6077,7 +6079,7 @@ ${mlzBlock}` : mlzBlock;
         } catch (_) {
         }
         try {
-          Zotero.debug(`[IndigoBook CSL-M] prefs pane register failed: ${String(e)}`);
+          Zotero.debug(`[Citation Phoenix] prefs pane register failed: ${String(e)}`);
         } catch (_) {
         }
         this._scheduleRetry(String(e));
@@ -6086,7 +6088,7 @@ ${mlzBlock}` : mlzBlock;
     _scheduleRetry(reason) {
       if (this._registerAttempts >= this._maxRegisterAttempts) {
         try {
-          Zotero.debug(`[IndigoBook CSL-M] prefs pane registration gave up after ${this._registerAttempts} attempts: ${reason}`);
+          Zotero.debug(`[Citation Phoenix] prefs pane registration gave up after ${this._registerAttempts} attempts: ${reason}`);
         } catch (_) {
         }
         return;
@@ -6114,12 +6116,12 @@ ${mlzBlock}` : mlzBlock;
         if (!this._paneID) return;
         if (Zotero?.PreferencePanes?.unregister) {
           try {
-            Zotero.debug(`[IndigoBook CSL-M] prefs pane unregistering: paneID=${String(this._paneID)}`);
+            Zotero.debug(`[Citation Phoenix] prefs pane unregistering: paneID=${String(this._paneID)}`);
           } catch (_) {
           }
           Zotero.PreferencePanes.unregister(this._paneID);
           try {
-            Zotero.debug(`[IndigoBook CSL-M] prefs pane unregistered: paneID=${String(this._paneID)}`);
+            Zotero.debug(`[Citation Phoenix] prefs pane unregistered: paneID=${String(this._paneID)}`);
           } catch (_) {
           }
         }
@@ -6650,7 +6652,10 @@ ${mlzBlock}` : mlzBlock;
 
   // lib/main.mjs
   var _ctx;
-  var LEGACY_COMMENTER_INFO_ROW_ID = "indigobook-cslm-commenter-row";
+  var COMMENTER_INFO_ROW_IDS = [
+    "citation-phoenix-commenter-row",
+    "indigobook-cslm-commenter-row"
+  ];
   var BUNDLED_TRANSLATOR_FILES = [
     "Lexis+.js",
     "Westlaw.js"
@@ -6723,7 +6728,7 @@ ${mlzBlock}` : mlzBlock;
     destFile.append(filename);
     if (destFile.exists() && !force) {
       try {
-        Zotero.debug(`[IndigoBook CSL-M] style fallback skipped (file exists): ${filename}`);
+        Zotero.debug(`[Citation Phoenix] style fallback skipped (file exists): ${filename}`);
       } catch (e) {
       }
       return !!Zotero?.Styles?.get?.(styleID);
@@ -6732,9 +6737,28 @@ ${mlzBlock}` : mlzBlock;
     await Zotero?.Styles?.reinit?.();
     return !!Zotero?.Styles?.get?.(styleID);
   }
-  function _unregisterLegacyCommenterInfoRow() {
+  async function _ensureStylesLoaded() {
+    const styles = Zotero?.Styles;
+    if (!styles) return false;
+    if (typeof styles.initialized === "function" && styles.initialized()) return true;
+    if (typeof styles.init === "function") {
+      await styles.init();
+      return typeof styles.initialized !== "function" || styles.initialized();
+    }
+    return true;
+  }
+  function _unregisterCommenterInfoRows() {
     try {
-      Zotero?.ItemPaneManager?.unregisterInfoRow?.(LEGACY_COMMENTER_INFO_ROW_ID);
+      const manager = Zotero?.ItemPaneManager;
+      if (typeof manager?.unregisterInfoRow !== "function") return;
+      const rowData = manager.customInfoRowData;
+      const optionsCache = manager._infoRowManager?._optionsCache;
+      const hasRegistry = !!rowData || !!optionsCache;
+      for (const rowID of COMMENTER_INFO_ROW_IDS) {
+        const isRegistered = !!rowData?.[rowID] || !!optionsCache?.[rowID];
+        if (hasRegistry && !isRegistered) continue;
+        manager.unregisterInfoRow(rowID);
+      }
     } catch (e) {
     }
   }
@@ -6744,31 +6768,32 @@ ${mlzBlock}` : mlzBlock;
     const bundledUpdatedMillis = _styleUpdatedMillis(_extractStyleUpdated(styleXML));
     if (!styleID) {
       try {
-        Zotero.debug(`[IndigoBook CSL-M] style install skipped (missing id): ${relPath}`);
+        Zotero.debug(`[Citation Phoenix] style install skipped (missing id): ${relPath}`);
       } catch (e) {
       }
       return;
     }
+    await _ensureStylesLoaded();
     const installedStyle = Zotero?.Styles?.get?.(styleID);
     if (installedStyle) {
       const installedUpdatedMillis = await _getInstalledStyleUpdatedMillis(installedStyle);
       const shouldUpdate = bundledUpdatedMillis != null && (installedUpdatedMillis == null || bundledUpdatedMillis > installedUpdatedMillis);
       if (!shouldUpdate) {
         try {
-          Zotero.debug(`[IndigoBook CSL-M] style already up to date: ${styleID}`);
+          Zotero.debug(`[Citation Phoenix] style already up to date: ${styleID}`);
         } catch (e) {
         }
         return;
       }
       try {
-        Zotero.debug(`[IndigoBook CSL-M] updating installed style: ${styleID}`);
+        Zotero.debug(`[Citation Phoenix] updating installed style: ${styleID}`);
       } catch (e) {
       }
     }
     const installFn = Zotero?.Styles?.install;
     if (typeof installFn !== "function") {
       try {
-        Zotero.debug(`[IndigoBook CSL-M] style install unavailable (no Zotero.Styles.install): ${styleID}`);
+        Zotero.debug(`[Citation Phoenix] style install unavailable (no Zotero.Styles.install): ${styleID}`);
       } catch (e) {
       }
       return;
@@ -6792,7 +6817,7 @@ ${mlzBlock}` : mlzBlock;
       }
     }
     try {
-      Zotero.debug(`[IndigoBook CSL-M] style ${installed ? "installed" : "install failed"}: ${styleID}`);
+      Zotero.debug(`[Citation Phoenix] style ${installed ? "installed" : "install failed"}: ${styleID}`);
     } catch (e) {
     }
   }
@@ -6802,15 +6827,24 @@ ${mlzBlock}` : mlzBlock;
       files = await dataStore.loadJSON("styles/index.json");
     } catch (e) {
       try {
-        Zotero.debug(`[IndigoBook CSL-M] style install skipped (styles/index.json unavailable): ${String(e)}`);
+        Zotero.debug(`[Citation Phoenix] style install skipped (styles/index.json unavailable): ${String(e)}`);
       } catch (_) {
       }
       return;
     }
     if (!Array.isArray(files) || !files.length) {
       try {
-        Zotero.debug("[IndigoBook CSL-M] style install skipped (styles/index.json empty or invalid)");
+        Zotero.debug("[Citation Phoenix] style install skipped (styles/index.json empty or invalid)");
       } catch (e) {
+      }
+      return;
+    }
+    try {
+      await _ensureStylesLoaded();
+    } catch (e) {
+      try {
+        Zotero.debug(`[Citation Phoenix] style install skipped (Zotero styles unavailable): ${String(e)}`);
+      } catch (_) {
       }
       return;
     }
@@ -6820,7 +6854,7 @@ ${mlzBlock}` : mlzBlock;
         await _installStyleIfMissing({ rootURI, dataStore, relPath });
       } catch (e) {
         try {
-          Zotero.debug(`[IndigoBook CSL-M] style install error (${relPath}): ${String(e)}`);
+          Zotero.debug(`[Citation Phoenix] style install error (${relPath}): ${String(e)}`);
         } catch (_) {
         }
       }
@@ -6835,20 +6869,62 @@ ${mlzBlock}` : mlzBlock;
       return null;
     }
   }
+  function _translatorUpdatedMillis(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return null;
+    const normalized = raw.replace(/^(\d{4}-\d{2}-\d{2})\s+/, "$1T");
+    const millis = Date.parse(normalized);
+    return Number.isFinite(millis) ? millis : null;
+  }
+  async function _ensureTranslatorsLoaded() {
+    const translators = Zotero?.Translators;
+    if (!translators) return false;
+    if (typeof translators.init === "function") {
+      await translators.init();
+    }
+    return true;
+  }
+  async function _getInstalledTranslator(translatorID) {
+    try {
+      await _ensureTranslatorsLoaded();
+      const getFn = Zotero?.Translators?.get;
+      if (typeof getFn !== "function") return null;
+      return await getFn.call(Zotero.Translators, translatorID);
+    } catch (e) {
+      return null;
+    }
+  }
   async function _installTranslatorIfMissing({ dataStore, relPath }) {
     const code = await dataStore.loadText(relPath);
     const metadata = _extractTranslatorMetadata(code);
     if (!metadata?.translatorID) {
       try {
-        Zotero.debug(`[IndigoBook CSL-M] translator install skipped (missing translatorID): ${relPath}`);
+        Zotero.debug(`[Citation Phoenix] translator install skipped (missing translatorID): ${relPath}`);
       } catch (e) {
       }
       return;
     }
+    const installedTranslator = await _getInstalledTranslator(metadata.translatorID);
+    if (installedTranslator) {
+      const bundledUpdatedMillis = _translatorUpdatedMillis(metadata.lastUpdated);
+      const installedUpdatedMillis = _translatorUpdatedMillis(installedTranslator.lastUpdated);
+      const shouldUpdate = bundledUpdatedMillis != null && (installedUpdatedMillis == null || bundledUpdatedMillis > installedUpdatedMillis);
+      if (!shouldUpdate) {
+        try {
+          Zotero.debug(`[Citation Phoenix] translator already up to date: ${metadata.label}`);
+        } catch (e) {
+        }
+        return;
+      }
+      try {
+        Zotero.debug(`[Citation Phoenix] updating installed translator: ${metadata.label}`);
+      } catch (e) {
+      }
+    }
     const saveFn = Zotero?.Translators?.save;
     if (typeof saveFn !== "function") {
       try {
-        Zotero.debug(`[IndigoBook CSL-M] translator install unavailable (no Zotero.Translators.save): ${metadata.label}`);
+        Zotero.debug(`[Citation Phoenix] translator install unavailable (no Zotero.Translators.save): ${metadata.label}`);
       } catch (e) {
       }
       return;
@@ -6856,11 +6932,15 @@ ${mlzBlock}` : mlzBlock;
     let installed = false;
     try {
       await saveFn.call(Zotero.Translators, metadata, code);
-      installed = !!Zotero?.Translators?.get?.(metadata.translatorID);
+      installed = !!await _getInstalledTranslator(metadata.translatorID);
     } catch (e) {
+      try {
+        Zotero.debug(`[Citation Phoenix] translator install error (${metadata.label}): ${String(e)}`);
+      } catch (_) {
+      }
     }
     try {
-      Zotero.debug(`[IndigoBook CSL-M] translator ${installed ? "installed" : "install failed"}: ${metadata.label}`);
+      Zotero.debug(`[Citation Phoenix] translator ${installed ? "installed" : "install failed"}: ${metadata.label}`);
     } catch (e) {
     }
   }
@@ -6871,14 +6951,14 @@ ${mlzBlock}` : mlzBlock;
         await _installTranslatorIfMissing({ dataStore, relPath });
       } catch (e) {
         try {
-          Zotero.debug(`[IndigoBook CSL-M] translator install error (${relPath}): ${String(e)}`);
+          Zotero.debug(`[Citation Phoenix] translator install error (${relPath}): ${String(e)}`);
         } catch (_) {
         }
       }
     }
   }
   async function activate({ id, version, rootURI }) {
-    _diagnostic(`[IndigoBook CSL-M] activate begin id=${String(id)} version=${String(version)}`);
+    _diagnostic(`[Citation Phoenix] activate begin id=${String(id)} version=${String(version)}`);
     const locale = Zotero?.locale || "en-US";
     _ctx = {
       id,
@@ -6917,12 +6997,16 @@ ${mlzBlock}` : mlzBlock;
       rootURI
     });
     await _ctx.prefsUI.register();
-    _unregisterLegacyCommenterInfoRow();
+    _unregisterCommenterInfoRows();
+    try {
+      delete Zotero.CitationPhoenixCommenterRowID;
+    } catch (e) {
+    }
     try {
       delete Zotero.IndigoBookCSLMCommenterRowID;
     } catch (e) {
     }
-    Zotero.IndigoBookCSLMBridge = {
+    Zotero.CitationPhoenixBridge = {
       listPrimaryDatasetOptions() {
         return _ctx?.abbrevs?.listPrimaryDatasetOptions?.() || [];
       },
@@ -6988,16 +7072,25 @@ ${mlzBlock}` : mlzBlock;
         };
       }
     };
-    _diagnostic(`[IndigoBook CSL-M] activated v${version}`);
+    Zotero.IndigoBookCSLMBridge = Zotero.CitationPhoenixBridge;
+    _diagnostic(`[Citation Phoenix] activated v${version}`);
   }
   async function deactivate() {
     try {
-      _diagnostic("[IndigoBook CSL-M] deactivate begin");
+      _diagnostic("[Citation Phoenix] deactivate begin");
+      try {
+        delete Zotero.CitationPhoenixBridge;
+      } catch (e) {
+      }
       try {
         delete Zotero.IndigoBookCSLMBridge;
       } catch (e) {
       }
-      _unregisterLegacyCommenterInfoRow();
+      _unregisterCommenterInfoRows();
+      try {
+        delete Zotero.CitationPhoenixCommenterRowID;
+      } catch (e) {
+      }
       try {
         delete Zotero.IndigoBookCSLMCommenterRowID;
       } catch (e) {
@@ -7005,7 +7098,7 @@ ${mlzBlock}` : mlzBlock;
       _ctx?.prefsUI?.unregister?.();
       _ctx?.patcher?.unpatch();
     } finally {
-      _diagnostic("[IndigoBook CSL-M] deactivate complete");
+      _diagnostic("[Citation Phoenix] deactivate complete");
       _ctx = null;
     }
   }

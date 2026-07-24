@@ -6,7 +6,7 @@ Repository contract for Codex and other agents.
 
 - Treat handwritten source as the source of truth.
 - Edit source files, not generated output, unless the user explicitly asks for a bundle-only hotfix.
-- Do not hand-edit `content/indigobook-cslm.js`; `package-xpi.ps1` regenerates it.
+- Do not hand-edit `content/citation-phoenix.js`; `package-xpi.ps1` regenerates it.
 - Use `package-xpi.ps1` as the canonical packaging step.
 - Keep packaging logic and fixes in source files and build scripts.
 - Use `apply_patch` for manual edits.

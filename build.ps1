@@ -1,1 +1,1 @@
-c:\esbuild\esbuild.exe lib\main.mjs --bundle --format=iife --global-name=IndigoBookCSLM --platform=browser --outfile=content\indigobook-cslm.js
+c:\esbuild\esbuild.exe lib\main.mjs --bundle --format=iife --global-name=CitationPhoenix --platform=browser --outfile=content\citation-phoenix.js

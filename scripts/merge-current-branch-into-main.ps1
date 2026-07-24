@@ -43,11 +43,13 @@ try {
         throw "You are already on $MainBranch. Check out the source branch first."
     }
 
+    $mergeMessage = "merging $currentBranch"
+
     Write-Host "Merging $currentBranch into $MainBranch" -ForegroundColor Cyan
 
     Invoke-Git -Arguments @('checkout', $MainBranch)
     Invoke-Git -Arguments @('pull', '--ff-only')
-    Invoke-Git -Arguments @('merge', '--no-ff', $currentBranch)
+    Invoke-Git -Arguments @('merge', '--no-ff', '-m', $mergeMessage, $currentBranch)
 
     if ($Push) {
         Invoke-Git -Arguments @('push')
