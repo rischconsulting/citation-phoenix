@@ -47,8 +47,8 @@ await service.preload();
 const availableDomains = service.getAvailableAbbrevDomains();
 assert.ok(Array.isArray(availableDomains.ca), 'Canada should expose abbreviation domains');
 assert.ok(availableDomains.ca.includes('fr'), 'Canada should expose the fr abbreviation domain');
-assert.ok(Array.isArray(availableDomains.ch), 'Switzerland should expose an abbreviation domain entry even without variants');
-assert.equal(availableDomains.ch.length, 0, 'Switzerland should expose an empty abbreviation domain list when no variants exist');
+assert.ok(Array.isArray(availableDomains.ch), 'Switzerland should expose abbreviation domains');
+assert.ok(availableDomains.ch.includes('fr'), 'Switzerland should expose the synced fr abbreviation domain');
 
 const cases = [
   {

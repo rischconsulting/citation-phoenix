@@ -123,6 +123,21 @@ These persisted overrides are exposed through `Zotero.CitationPhoenixBridge` and
 
 ## Build And Package
 
+### Live Zotero schema UI audit
+
+After installing the newly built XPI and restarting Zotero, open **Tools >
+Developer > Run JavaScript** and run the complete contents of
+`scripts/test-zotero-schema-ui.js` with **Run as async function** enabled. The
+audit creates a temporary item for every item type in `content/schema.json`,
+selects it, inspects the live InfoBox DOM, and checks field presence and
+relative order against the schema. Temporary items are deleted when the audit
+finishes. A completion dialog reports the totals, the detailed JSON report is
+returned in the result pane, and it is also copied to the clipboard.
+
+For visual review, edit the options at the top of the script. For example,
+use `itemTypes: ['case']`, `pauseMs: 3000`, and `keepItems: true` to leave a
+single generated item visible and inspect it manually.
+
 ### Prerequisite
 
 Install `esbuild` at the path used by the scripts:

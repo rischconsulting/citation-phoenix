@@ -31,6 +31,10 @@ Write-Host "Syncing Juris-M assets..." -ForegroundColor Cyan
 if ($LASTEXITCODE -ne 0) { throw "sync-juris-assets.ps1 failed with exit code $LASTEXITCODE" }
 Write-Host "Juris-M asset sync complete." -ForegroundColor Cyan
 
+$fluentScript = Join-Path -Path $PSScriptRoot -ChildPath 'scripts\generate-schema-ftl.ps1'
+& $fluentScript -SourceDir $SourceDir
+if ($LASTEXITCODE -ne 0) { throw "generate-schema-ftl.ps1 failed with exit code $LASTEXITCODE" }
+
 # Keep bundled style indices aligned with source assets.
 Update-JsonIndex `
     -DirectoryPath (Join-Path -Path $PSScriptRoot -ChildPath 'styles') `

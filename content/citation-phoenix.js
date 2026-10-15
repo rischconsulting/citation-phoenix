@@ -2271,18 +2271,8 @@ ${mlzBlock}` : mlzBlock;
       this._maxCitationDataLogs = 80;
       this._itemObserverID = null;
       this._itemPanePatchTimer = null;
-      this._infoPaneRefreshTimer = null;
-      this._deferredInfoPaneRefresh = null;
       this._deferredItemSyncTimer = null;
       this._deferredItemSyncIDs = /* @__PURE__ */ new Set();
-      this._schemaSequenceRetryTimer = null;
-      this._schemaSequenceRetryKey = "";
-      this._schemaSequenceObserver = null;
-      this._schemaSequenceObserverTable = null;
-      this._schemaSequenceObserverKey = "";
-      this._schemaSequenceObserverTimer = null;
-      this._schemaSequenceObserverSuppressed = false;
-      this._forceFullInfoPaneRefresh = false;
       this._itemPanePatchAttempts = 0;
       this._maxItemPanePatchAttempts = 20;
       this._commenterRowID = "ibcslm-commenter-row";
@@ -2294,12 +2284,14 @@ ${mlzBlock}` : mlzBlock;
       this._newItemMenuMarkerAttribute = "data-ibcslm-new-item-custom";
       this._pendingCustomNewItemTypes = [];
       this._registeredSchemaRowIDs = [];
+      this._registeredSchemaRowsByField = /* @__PURE__ */ new Map();
       this._syncInFlight = /* @__PURE__ */ new Set();
       this._journalAbbrByContainerTitleKey = /* @__PURE__ */ new Map();
       this._containerTitleShortByKey = /* @__PURE__ */ new Map();
       this._containerTitleContextByKey = /* @__PURE__ */ new Map();
     }
     patch() {
+      this._registerSchemaInfoRows();
       this._patchCreatorTypes();
       this._patchItemCreators();
       this._patchInfoBoxPrototype();
@@ -2309,7 +2301,6 @@ ${mlzBlock}` : mlzBlock;
       this._patchGetCiteProcFallback();
       this._registerCaseReporterSync();
       this._patchItemPaneRender();
-      this._patchInfoBoxRender();
       this._patchNewItemBuilders();
       this._patchNewItemMenus();
     }
@@ -2317,8 +2308,13 @@ ${mlzBlock}` : mlzBlock;
       this._unpatchNewItemMenus();
       this._unpatchNewItemBuilders();
       this._unregisterCaseReporterSync();
-      this._unpatchInfoBoxRender();
       this._unpatchItemPaneRender();
+      this._unregisterSchemaInfoRows();
+      this._removeExtraPersonCreatorRows(this._getActiveInfoBox());
+      this._removeCommenterField(this._getActiveInfoBox());
+      this._removeJurisdictionField(this._getActiveInfoBox());
+      this._removeCustomCourtField(this._getActiveInfoBox());
+      this._cleanupRegisteredSchemaInfoRows(this._getActiveInfoBox());
       this._journalAbbrByContainerTitleKey.clear();
       this._containerTitleShortByKey.clear();
       this._containerTitleContextByKey.clear();
@@ -2339,22 +2335,79 @@ ${mlzBlock}` : mlzBlock;
       }
       const itemProto = Zotero?.Item?.prototype;
       if (itemProto && this._orig.itemSetCreator) itemProto.setCreator = this._orig.itemSetCreator;
-      const infoBoxProto = this._getInfoBoxPrototype();
+      const infoBoxProto = this._orig.infoBoxPrototype || this._getInfoBoxPrototype();
       if (infoBoxProto) {
         if (this._orig.infoBoxProtoRender) infoBoxProto.render = this._orig.infoBoxProtoRender;
         if (this._orig.infoBoxProtoModifyCreator) infoBoxProto.modifyCreator = this._orig.infoBoxProtoModifyCreator;
         if (this._orig.infoBoxProtoRemoveCreator) infoBoxProto.removeCreator = this._orig.infoBoxProtoRemoveCreator;
+        if (this._orig.infoBoxProtoShowEditor) infoBoxProto.showEditor = this._orig.infoBoxProtoShowEditor;
+        delete infoBoxProto._ibcslmRenderPatched;
       }
       if (this._orig.getCiteProc) Zotero.Style.prototype.getCiteProc = this._orig.getCiteProc;
     }
     _registerSchemaInfoRows() {
       this._registeredSchemaRowIDs = [];
+      this._registeredSchemaRowsByField.clear();
+      const manager = Zotero?.ItemPaneManager;
+      if (typeof manager?.registerInfoRow !== "function") return;
+      for (const fieldName of this.schemaConfig?.getAllFieldNames?.() || []) {
+        const field = String(fieldName || "").trim();
+        if (!field || field === "jurisdiction" || this._isSchemaFlagField(field)) continue;
+        const self = this;
+        const registeredID = manager.registerInfoRow({
+          rowID: this._getSchemaInfoRowID(field),
+          pluginID: this.pluginID,
+          label: {
+            l10nID: this._getSchemaInfoRowL10nID(field)
+          },
+          position: "afterCreators",
+          multiline: false,
+          nowrap: true,
+          editable: true,
+          onGetData({ item }) {
+            return self._getSchemaInfoRowDisplayValue(item, field);
+          },
+          onSetData({ item, value }) {
+            const definition = self._getSchemaInfoRowDefinition(item, field);
+            if (!self._shouldUseRegisteredSchemaInfoRow(item, definition)) return;
+            const nextValue = definition?.kind === "date" ? self._normalizeSchemaDateInput(value) : String(value == null ? "" : value).trim();
+            return self._saveSchemaFieldValue(item, definition, nextValue, { refresh: false }).catch((e) => {
+              try {
+                Zotero.logError(e);
+              } catch (_) {
+              }
+            });
+          },
+          onItemChange({ item, setEnabled, setEditable }) {
+            const definition = self._getSchemaInfoRowDefinition(item, field);
+            const enabled = self._shouldUseRegisteredSchemaInfoRow(item, definition);
+            setEnabled(enabled);
+            setEditable?.(enabled);
+          }
+        });
+        if (!registeredID) continue;
+        this._registeredSchemaRowIDs.push(registeredID);
+        this._registeredSchemaRowsByField.set(field, registeredID);
+      }
     }
     _unregisterSchemaInfoRows() {
+      const manager = Zotero?.ItemPaneManager;
+      if (typeof manager?.unregisterInfoRow === "function") {
+        for (const rowID of this._registeredSchemaRowIDs) {
+          try {
+            manager.unregisterInfoRow(rowID);
+          } catch (e) {
+          }
+        }
+      }
       this._registeredSchemaRowIDs = [];
+      this._registeredSchemaRowsByField.clear();
     }
     _getSchemaInfoRowID(fieldName) {
       return `${this._schemaInfoRowIDPrefix}-${String(fieldName || "").trim()}`;
+    }
+    _getSchemaInfoRowL10nID(fieldName) {
+      return `citation-phoenix-field-${String(fieldName || "").trim().replace(/([a-z0-9])([A-Z])/g, "$1-$2").replace(/[^a-zA-Z0-9-]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").toLowerCase()}`;
     }
     _getSchemaInfoRowDefinition(item, fieldName) {
       if (!item || !fieldName) return null;
@@ -2368,7 +2421,12 @@ ${mlzBlock}` : mlzBlock;
       const itemTypeName = this._getItemTypeName(item);
       if (itemTypeName === "case" && fieldName === "court") return false;
       const nativeFieldName = this._resolveNativeFieldName(item.itemTypeID, fieldName, definition.baseField);
+      if (definition.kind === "date" && nativeFieldName) return false;
       return nativeFieldName !== fieldName;
+    }
+    _shouldUseRegisteredSchemaInfoRow(item, definition) {
+      if (!this._shouldUseSchemaInfoRow(item, definition)) return false;
+      return !this._isSchemaFlagField(definition?.field);
     }
     _getSchemaInfoRowDisplayValue(item, fieldName) {
       const definition = this._getSchemaInfoRowDefinition(item, fieldName);
@@ -2432,6 +2490,8 @@ ${mlzBlock}` : mlzBlock;
     _patchInfoBoxPrototype(protoOverride = null) {
       const proto = protoOverride || this._getInfoBoxPrototype();
       if (!proto) return;
+      if (this._orig.infoBoxPrototype === proto && proto._ibcslmRenderPatched) return;
+      this._orig.infoBoxPrototype = proto;
       if (!this._orig.infoBoxProtoRender && typeof proto.render === "function") {
         this._orig.infoBoxProtoRender = proto.render;
       }
@@ -2441,26 +2501,49 @@ ${mlzBlock}` : mlzBlock;
       if (!this._orig.infoBoxProtoRemoveCreator && typeof proto.removeCreator === "function") {
         this._orig.infoBoxProtoRemoveCreator = proto.removeCreator;
       }
+      if (!this._orig.infoBoxProtoShowEditor && typeof proto.showEditor === "function") {
+        this._orig.infoBoxProtoShowEditor = proto.showEditor;
+      }
       const self = this;
       if (this._orig.infoBoxProtoRender) {
         proto.render = function(...args) {
-          const result = self._orig.infoBoxProtoRender.apply(this, args);
+          const extraPersonEditorState = self._captureExtraPersonEditorState(this);
           try {
-            try {
-              const itemID = this.item?.id;
-              const customRows = this.querySelectorAll?.("[data-custom-row-id]")?.length || 0;
-              Zotero.debug(`[Citation Phoenix] info-box proto render: item=${String(itemID || "")} customRows=${String(customRows)}`);
-            } catch (e) {
-            }
-            self._refreshInfoBoxAfterRender(this);
+            self._prepareInfoBoxForRender(this);
           } catch (e) {
             try {
-              Zotero.debug(`[Citation Phoenix] info-box commenter render patch failed: ${String(e)}`);
+              Zotero.debug(`[Citation Phoenix] info-box pre-render setup failed: ${String(e)}`);
             } catch (_) {
             }
           }
+          const finishRender = () => {
+            try {
+              try {
+                const itemID = this.item?.id;
+                const customRows = this.querySelectorAll?.("[data-custom-row-id]")?.length || 0;
+                Zotero.debug(`[Citation Phoenix] info-box proto render: item=${String(itemID || "")} customRows=${String(customRows)}`);
+              } catch (e) {
+              }
+              self._refreshInfoBoxAfterRender(this);
+              self._restoreExtraPersonEditorState(this, extraPersonEditorState);
+            } catch (e) {
+              try {
+                Zotero.debug(`[Citation Phoenix] info-box commenter render patch failed: ${String(e)}`);
+              } catch (_) {
+              }
+            }
+          };
+          const result = self._orig.infoBoxProtoRender.apply(this, args);
+          if (result && typeof result.then === "function") {
+            return result.then((value) => {
+              finishRender();
+              return value;
+            });
+          }
+          finishRender();
           return result;
         };
+        proto._ibcslmRenderPatched = true;
       }
       if (this._orig.infoBoxProtoModifyCreator) {
         proto.modifyCreator = function(index, fields) {
@@ -2482,13 +2565,11 @@ ${mlzBlock}` : mlzBlock;
           }
           const extraPersonType = requestedExtraPersonType || existingExtraPersonType || self._getExtraPersonConfigByRowCreatorType(row);
           if (extraPersonType) {
-            const nextPerson = self._extraPersonFromCreatorFields(fields);
-            let storageIndex = self._getExtraPersonStorageIndex(row);
-            if (nextPerson) {
-              if (storageIndex == null) storageIndex = self._appendStoredExtraPerson(this.item, extraPersonType, nextPerson);
-              else storageIndex = self._setStoredExtraPersonAtNearestIndex(this.item, extraPersonType, storageIndex, nextPerson);
-            }
-            self._markExtraPersonCreatorRow(self._getCreatorTypeLabel(this, index)?.closest?.(".meta-row"), extraPersonType, storageIndex);
+            const storageIndex = self._getExtraPersonStorageIndex(row);
+            const storedPerson = storageIndex == null ? null : self._getStoredExtraPeople(this.item, extraPersonType)[storageIndex] || null;
+            const nextPerson = self._extraPersonFromCreatorFields(fields, storedPerson);
+            const savedStorageIndex = nextPerson ? self._setStoredExtraPersonForRow(this.item, extraPersonType, row, nextPerson) : storageIndex;
+            self._markExtraPersonCreatorRow(self._getCreatorTypeLabel(this, index)?.closest?.(".meta-row"), extraPersonType, savedStorageIndex);
             return true;
           }
           if (existingExtraPersonType) {
@@ -2515,6 +2596,16 @@ ${mlzBlock}` : mlzBlock;
           }
           const nativeIndex = self._getNativeCreatorIndex(this, index);
           return self._orig.infoBoxProtoRemoveCreator.call(this, nativeIndex);
+        };
+      }
+      if (this._orig.infoBoxProtoShowEditor) {
+        proto.showEditor = function(elem, ...args) {
+          const extraValue = self._getExtraPersonEditorValue(this, elem);
+          if (extraValue) {
+            if (elem && typeof elem.value !== "undefined") elem.value = extraValue.value;
+            return Promise.resolve();
+          }
+          return self._orig.infoBoxProtoShowEditor.call(this, elem, ...args);
         };
       }
     }
@@ -2548,17 +2639,13 @@ ${mlzBlock}` : mlzBlock;
               self._deferItemSyncUntilInfoBoxIdle(ids);
               return;
             }
-            let changed = false;
             for (const id of ids) {
               if (event === "add") {
-                changed = await self._applyPendingCustomNewItemType(id) || changed;
+                await self._applyPendingCustomNewItemType(id);
               }
-              changed = await self._syncItemFromFieldsAndMLZ(id) || changed;
             }
-            if (changed) {
-              self._scheduleActiveInfoPaneRefresh(75, true);
-            } else if (["select", "refresh", "redraw", "modify"].includes(event)) {
-              self._scheduleActiveInfoPaneRefresh(75);
+            for (const id of ids) {
+              await self._syncItemFromFieldsAndMLZ(id);
             }
             return;
           }
@@ -2841,7 +2928,6 @@ ${mlzBlock}` : mlzBlock;
         item.setField("extra", nextExtra);
         await item.saveTx({ skipDateModifiedUpdate: true });
       }
-      this._scheduleActiveInfoPaneRefresh(0, true);
       try {
         Zotero.debug(`[Citation Phoenix] created custom new-item type: item=${String(item.id || "")} native=${nativeType} custom=${customItemType}`);
       } catch (e) {
@@ -2906,6 +2992,7 @@ ${mlzBlock}` : mlzBlock;
         this._scheduleItemPaneRenderPatch();
         return;
       }
+      this._patchInfoBoxPrototypeFromInstance(this._getActiveInfoBox());
       const self = this;
       this._orig.itemDetailsOwner = itemDetails;
       this._orig.itemDetailsRender = itemDetails.render;
@@ -2933,39 +3020,8 @@ ${mlzBlock}` : mlzBlock;
       };
       this._patchNewItemMenus();
     }
-    _patchInfoBoxRender() {
-      if (this._orig.infoBoxRender && this._orig.infoBoxOwner) return;
-      const infoBox = this._getActiveInfoBox();
-      if (!infoBox?.render) {
-        this._scheduleItemPaneRenderPatch();
-        return;
-      }
-      this._patchInfoBoxPrototypeFromInstance(infoBox);
-      const self = this;
-      this._orig.infoBoxOwner = infoBox;
-      this._orig.infoBoxRender = infoBox.render;
-      infoBox.render = function(...args) {
-        const result = self._orig.infoBoxRender.apply(this, args);
-        try {
-          try {
-            const itemID = this.item?.id;
-            const customRows = this.querySelectorAll?.("[data-custom-row-id]")?.length || 0;
-            Zotero.debug(`[Citation Phoenix] info-box instance render: item=${String(itemID || "")} customRows=${String(customRows)}`);
-          } catch (e) {
-          }
-          self._refreshInfoBoxAfterRender(this);
-        } catch (e) {
-          try {
-            Zotero.debug(`[Citation Phoenix] custom info row render failed: ${String(e)}`);
-          } catch (_) {
-          }
-        }
-        return result;
-      };
-      this._patchNewItemMenus();
-    }
     _scheduleItemPaneRenderPatch() {
-      if (this._orig.itemDetailsRender && this._orig.itemDetailsOwner && (this._orig.infoBoxRender && this._orig.infoBoxOwner)) return;
+      if (this._orig.itemDetailsRender && this._orig.itemDetailsOwner && this._orig.infoBoxProtoRender) return;
       if (this._itemPanePatchAttempts >= this._maxItemPanePatchAttempts) return;
       if (this._itemPanePatchTimer) return;
       this._itemPanePatchAttempts += 1;
@@ -2973,7 +3029,7 @@ ${mlzBlock}` : mlzBlock;
         this._itemPanePatchTimer = null;
         this._patchNewItemBuilders();
         this._patchItemPaneRender();
-        this._patchInfoBoxRender();
+        this._patchInfoBoxPrototypeFromInstance(this._getActiveInfoBox());
       }, 500);
     }
     _unpatchItemPaneRender() {
@@ -2982,23 +3038,11 @@ ${mlzBlock}` : mlzBlock;
           clearTimeout(this._itemPanePatchTimer);
           this._itemPanePatchTimer = null;
         }
-        if (this._infoPaneRefreshTimer) {
-          clearTimeout(this._infoPaneRefreshTimer);
-          this._infoPaneRefreshTimer = null;
-        }
-        this._clearDeferredInfoPaneRefresh();
         if (this._deferredItemSyncTimer) {
           clearTimeout(this._deferredItemSyncTimer);
           this._deferredItemSyncTimer = null;
         }
-        if (this._schemaSequenceRetryTimer) {
-          clearTimeout(this._schemaSequenceRetryTimer);
-          this._schemaSequenceRetryTimer = null;
-        }
-        this._disconnectSchemaSequenceObserver();
-        this._schemaSequenceRetryKey = "";
         this._deferredItemSyncIDs.clear();
-        this._forceFullInfoPaneRefresh = false;
         if (this._orig.itemDetailsOwner && this._orig.itemDetailsRender) {
           this._orig.itemDetailsOwner.render = this._orig.itemDetailsRender;
         }
@@ -3006,22 +3050,6 @@ ${mlzBlock}` : mlzBlock;
       } finally {
         delete this._orig.itemDetailsOwner;
         delete this._orig.itemDetailsRender;
-      }
-    }
-    _unpatchInfoBoxRender() {
-      try {
-        if (this._orig.infoBoxOwner && this._orig.infoBoxRender) {
-          this._orig.infoBoxOwner.render = this._orig.infoBoxRender;
-        }
-        this._removeExtraPersonCreatorRows(this._getActiveInfoBox());
-        this._removeCommenterField(this._getActiveInfoBox());
-        this._removeJurisdictionField(this._getActiveInfoBox());
-        this._removeCustomCourtField(this._getActiveInfoBox());
-        this._cleanupRegisteredSchemaInfoRows(this._getActiveInfoBox());
-      } catch (e) {
-      } finally {
-        delete this._orig.infoBoxOwner;
-        delete this._orig.infoBoxRender;
       }
     }
     _unregisterCaseReporterSync() {
@@ -3037,71 +3065,57 @@ ${mlzBlock}` : mlzBlock;
           clearTimeout(this._deferredItemSyncTimer);
           this._deferredItemSyncTimer = null;
         }
-        if (this._schemaSequenceRetryTimer) {
-          clearTimeout(this._schemaSequenceRetryTimer);
-          this._schemaSequenceRetryTimer = null;
-        }
-        this._disconnectSchemaSequenceObserver();
-        this._schemaSequenceRetryKey = "";
         this._deferredItemSyncIDs.clear();
       }
     }
-    _scheduleActiveInfoPaneRefresh(delay = 0, forceFullRender = false) {
-      if (this._infoPaneRefreshTimer) {
-        clearTimeout(this._infoPaneRefreshTimer);
+    _prepareInfoBoxForRender(infoBox) {
+      const item = infoBox?.item;
+      if (!item || item.deleted) return;
+      if (infoBox._extraItems?.length) {
+        infoBox.fieldOrder = [];
+        return;
       }
-      this._forceFullInfoPaneRefresh = this._forceFullInfoPaneRefresh || !!forceFullRender;
-      this._infoPaneRefreshTimer = setTimeout(() => {
-        this._infoPaneRefreshTimer = null;
-        const shouldForceFullRender = this._forceFullInfoPaneRefresh;
-        this._forceFullInfoPaneRefresh = false;
-        this._refreshActiveInfoPane(shouldForceFullRender);
-      }, Math.max(0, Number(delay) || 0));
+      const effectiveType = this._getItemTypeName(item);
+      const nativeType = String(Zotero?.ItemTypes?.getName?.(item.itemTypeID) || item.itemTypeID || "");
+      const renderKey = `${String(item.id || "")}::${nativeType}::${effectiveType}`;
+      if (infoBox._ibcslmEffectiveRenderKey !== renderKey) {
+        infoBox._ibcslmEffectiveRenderKey = renderKey;
+        infoBox.fieldOrder = this._getNativeFieldOrder(item, effectiveType);
+        infoBox._resetRenderedFlags?.();
+      }
     }
-    _refreshActiveInfoPane(forceFullRender = false) {
-      try {
-        const infoBox = this._getActiveInfoBox?.();
-        if (!infoBox) return;
-        if (this._isEditingInInfoBox(infoBox)) {
-          this._deferActiveInfoPaneRefreshUntilBlur(infoBox, forceFullRender);
-          return;
-        }
-        if (forceFullRender && typeof infoBox.render === "function") {
-          infoBox.render();
-          return;
-        }
-        this._refreshCustomInfoRows(infoBox);
-      } catch (e) {
+    _getNativeFieldOrder(item, effectiveType = this._getItemTypeName(item)) {
+      if (!item) return [];
+      const order = [];
+      const seen = /* @__PURE__ */ new Set();
+      const append = (fieldName) => {
+        const name = String(fieldName || "").trim();
+        if (!name || seen.has(name)) return;
+        seen.add(name);
+        order.push(name);
+      };
+      for (const fieldName of this.schemaConfig?.getSequenceForItemType?.(effectiveType) || []) {
+        const definition = this.schemaConfig?.getFieldDefinition?.(effectiveType, fieldName) || null;
+        append(this._resolveNativeFieldName(item.itemTypeID, fieldName, definition?.baseField));
       }
+      for (const fieldID of Zotero?.ItemFields?.getItemTypeFields?.(item.itemTypeID) || []) {
+        append(typeof fieldID === "string" ? fieldID : Zotero?.ItemFields?.getName?.(fieldID));
+      }
+      append("dateAdded");
+      append("dateModified");
+      return order;
     }
     _refreshInfoBoxAfterRender(infoBox) {
       if (!infoBox) return;
-      if (this._isEditingInInfoBox(infoBox)) {
-        try {
-          Zotero.debug("[Citation Phoenix] info-box render augmentation deferred while editor is active");
-        } catch (e) {
-        }
-        setTimeout(() => {
-          const activeInfoBox = this._getActiveInfoBox?.();
-          if (activeInfoBox !== infoBox) return;
-          if (this._isEditingInInfoBox(infoBox)) {
-            try {
-              this._ensureExtraPersonMenuItems(infoBox);
-              this._removeCommenterField(infoBox);
-              this._renderExtraPersonCreatorRows(infoBox);
-              this._refreshCustomInfoRows(infoBox, { preserveLayout: true });
-            } catch (e) {
-            }
-            return;
-          }
-          this._refreshInfoBoxAfterRender(infoBox);
-        }, 0);
-        return;
+      infoBox._saveFieldFocus?.();
+      try {
+        this._ensureExtraPersonMenuItems(infoBox);
+        this._removeCommenterField(infoBox);
+        this._renderExtraPersonCreatorRows(infoBox);
+        this._refreshCustomInfoRows(infoBox);
+      } finally {
+        infoBox._restoreFieldFocus?.();
       }
-      this._ensureExtraPersonMenuItems(infoBox);
-      this._removeCommenterField(infoBox);
-      this._renderExtraPersonCreatorRows(infoBox);
-      this._refreshCustomInfoRows(infoBox);
     }
     _isEditingInInfoBox(infoBox) {
       const activeElement = infoBox?.ownerDocument?.activeElement || null;
@@ -3132,59 +3146,19 @@ ${mlzBlock}` : mlzBlock;
         }
         const pendingIDs = Array.from(this._deferredItemSyncIDs);
         this._deferredItemSyncIDs.clear();
-        let changed = false;
         for (const id of pendingIDs) {
-          changed = await this._syncItemFromFieldsAndMLZ(id) || changed;
-        }
-        if (changed) {
-          this._scheduleActiveInfoPaneRefresh(75, true);
+          await this._syncItemFromFieldsAndMLZ(id);
         }
       }, 250);
     }
-    _deferActiveInfoPaneRefreshUntilBlur(infoBox, forceFullRender = false) {
-      const activeElement = infoBox?.ownerDocument?.activeElement || null;
-      if (!activeElement) return;
-      const existing = this._deferredInfoPaneRefresh;
-      if (existing?.element === activeElement) {
-        existing.forceFullRender = existing.forceFullRender || !!forceFullRender;
-        return;
-      }
-      this._clearDeferredInfoPaneRefresh();
-      const state = {
-        element: activeElement,
-        forceFullRender: !!forceFullRender,
-        handler: null
-      };
-      state.handler = () => {
-        const shouldForceFullRender = !!state.forceFullRender;
-        this._clearDeferredInfoPaneRefresh();
-        this._scheduleActiveInfoPaneRefresh(50, shouldForceFullRender);
-      };
-      this._deferredInfoPaneRefresh = state;
-      activeElement.addEventListener?.("blur", state.handler, { once: true });
-    }
-    _clearDeferredInfoPaneRefresh() {
-      const state = this._deferredInfoPaneRefresh;
-      this._deferredInfoPaneRefresh = null;
-      if (!state?.element || !state.handler) return;
-      try {
-        state.element.removeEventListener?.("blur", state.handler);
-      } catch (e) {
-      }
-    }
-    _refreshRegisteredInfoRows() {
-    }
-    _refreshCustomInfoRows(infoBox, options = {}) {
+    _refreshCustomInfoRows(infoBox) {
       if (!infoBox) return;
-      const preserveLayout = !!options.preserveLayout;
       this._renderItemTypeField(infoBox);
       this._renderJurisdictionField(infoBox);
       this._renderCourtField(infoBox);
-      this._renderSchemaFieldRows(infoBox, { preserveLayout });
-      this._renderCustomCourtField(infoBox, { preserveLayout });
-      if (preserveLayout) return;
-      this._watchSchemaSequence(infoBox);
-      this._scheduleInitialSchemaSequenceRetry(infoBox);
+      this._renderSchemaFieldRows(infoBox);
+      this._renderCustomCourtField(infoBox);
+      this._applySchemaSequence(infoBox);
     }
     async _syncCaseReporterFromFieldsAndMLZ(itemID) {
       const item = this._getZoteroItemByAnyID(itemID);
@@ -3453,7 +3427,10 @@ ${mlzBlock}` : mlzBlock;
       }
       const existingRows = this._getExtraPersonCreatorRows(infoBox, extraPersonType);
       if (existingRows.length >= extraPeople.length) {
-        existingRows.forEach((row, idx) => this._markExtraPersonCreatorRow(row, extraPersonType, idx));
+        existingRows.forEach((row, idx) => {
+          this._markExtraPersonCreatorRow(row, extraPersonType, idx);
+          this._populateExtraPersonCreatorRow(infoBox, row, extraPeople[idx]);
+        });
         return;
       }
       this._removeEmptyDefaultCreatorRows(infoBox);
@@ -3466,11 +3443,40 @@ ${mlzBlock}` : mlzBlock;
         if (!row) continue;
         this._markExtraPersonCreatorRow(row, extraPersonType, storageIndex);
         row.setAttribute("data-ibcslm-rendered-extra-person-row", extraPersonType.key);
+        this._populateExtraPersonCreatorRow(infoBox, row, extraPeople[storageIndex]);
         try {
           Zotero.debug(`[Citation Phoenix] ${extraPersonType.key} creator row rendered: item=${String(item?.id || "")} rowIndex=${String(rowIndex)} storageIndex=${String(storageIndex)}`);
         } catch (e) {
         }
       }
+    }
+    _populateExtraPersonCreatorRow(infoBox, row, person) {
+      if (!row || !person) return;
+      const activeElement = infoBox?.ownerDocument?.activeElement || null;
+      if (activeElement && row.contains?.(activeElement)) return;
+      const rowIndex = this._getCreatorRowIndex(row);
+      if (rowIndex == null) return;
+      const data = this._extraPersonToCreatorData(person);
+      const setValue = (suffix, value) => {
+        const node = row.querySelector?.(`[fieldname="creator-${rowIndex}-${suffix}"]`) || row.querySelector?.(`[name="creator-${rowIndex}-${suffix}"]`);
+        if (!node) return;
+        const editor = node.matches?.("input, textarea, textbox, editable-text") ? node : node.querySelector?.("input, textarea, textbox, editable-text") || node;
+        if (typeof editor.value !== "undefined") editor.value = String(value || "");
+        else if ("textContent" in editor) editor.textContent = String(value || "");
+      };
+      setValue("firstName", data.firstName);
+      setValue("lastName", data.lastName);
+    }
+    _getExtraPersonEditorValue(infoBox, elem) {
+      const row = elem?.closest?.(".meta-row") || null;
+      const extraPersonType = row ? this._getExtraPersonConfigByIndex(infoBox, this._getCreatorRowIndex(row)) : null;
+      if (!extraPersonType) return null;
+      const storageIndex = this._getExtraPersonStorageIndex(row);
+      const person = storageIndex == null ? null : this._getStoredExtraPeople(infoBox?.item, extraPersonType)[storageIndex] || null;
+      const creatorField = String(elem?.getAttribute?.("fieldname") || "").split("-")[2];
+      const data = this._extraPersonToCreatorData(person);
+      if (!data || !["firstName", "lastName"].includes(creatorField)) return { value: "" };
+      return { value: String(data[creatorField] || "") };
     }
     _getCreatorTypeLabel(infoBox, rowIndex) {
       return infoBox?.querySelector?.(`.meta-label[fieldname="creator-${rowIndex}-typeID"]`) || infoBox?.querySelector?.(`.meta-label[fieldname="creator-${rowIndex}"]`) || null;
@@ -3628,6 +3634,43 @@ ${mlzBlock}` : mlzBlock;
         if (typeof infoBox._creatorCount === "number" && infoBox._creatorCount > 0) {
           infoBox._creatorCount -= 1;
         }
+      }
+    }
+    _captureExtraPersonEditorState(infoBox) {
+      const activeElement = infoBox?.ownerDocument?.activeElement || null;
+      const row = activeElement?.closest?.(".meta-row[data-ibcslm-extra-person-type]") || null;
+      if (!row) return null;
+      const fieldNode = activeElement.closest?.("[fieldname]") || activeElement;
+      const fieldName = String(fieldNode?.getAttribute?.("fieldname") || "").replace(/^creator-\d+/, "creator-*");
+      const selectionNode = typeof activeElement.selectionStart === "number" ? activeElement : fieldNode;
+      return {
+        itemID: String(infoBox?.item?.id || ""),
+        typeKey: String(row.getAttribute("data-ibcslm-extra-person-type") || ""),
+        storageIndex: String(row.getAttribute("data-ibcslm-extra-person-index") || ""),
+        fieldName,
+        value: typeof fieldNode?.value === "undefined" ? void 0 : fieldNode.value,
+        selectionStart: typeof selectionNode?.selectionStart === "number" ? selectionNode.selectionStart : null,
+        selectionEnd: typeof selectionNode?.selectionEnd === "number" ? selectionNode.selectionEnd : null,
+        selectionDirection: selectionNode?.selectionDirection || "none"
+      };
+    }
+    _restoreExtraPersonEditorState(infoBox, state) {
+      if (!state || String(infoBox?.item?.id || "") !== state.itemID) return;
+      const row = this._getExtraPersonCreatorRows(infoBox).find((candidate) => {
+        return candidate.getAttribute?.("data-ibcslm-extra-person-type") === state.typeKey && String(candidate.getAttribute?.("data-ibcslm-extra-person-index") || "") === state.storageIndex;
+      });
+      if (!row) return;
+      const target = Array.from(row.querySelectorAll?.("[fieldname]") || []).find((node) => {
+        return String(node.getAttribute?.("fieldname") || "").replace(/^creator-\d+/, "creator-*") === state.fieldName;
+      }) || null;
+      if (!target) return;
+      if (typeof state.value !== "undefined" && typeof target.value !== "undefined") target.value = state.value;
+      target.focus?.();
+      const selectionTarget = target.querySelector?.("input, textarea") || target;
+      if (state.selectionStart == null || typeof selectionTarget.setSelectionRange !== "function") return;
+      try {
+        selectionTarget.setSelectionRange(state.selectionStart, state.selectionEnd, state.selectionDirection);
+      } catch (e) {
       }
     }
     _unmarkExtraPersonCreatorRow(row) {
@@ -3995,13 +4038,11 @@ ${mlzBlock}` : mlzBlock;
           item.setField("extra", nextExtra);
           item.setField("court", "");
           await item.saveTx({ skipDateModifiedUpdate: true });
-          this._scheduleActiveInfoPaneRefresh(75, true);
           return;
         }
         await this._saveCourtFromMenu(item, selectedValue);
       };
       menulist.addEventListener("command", saveCourtValue);
-      menulist.addEventListener("change", saveCourtValue);
       return menulist;
     }
     _buildFilteredPickerControl(doc, {
@@ -4017,6 +4058,7 @@ ${mlzBlock}` : mlzBlock;
     }) {
       let currentDisplayValue = String(displayValue || "");
       let currentRawValue = String(currentValue || "");
+      let lastCommittedRawValue = currentRawValue;
       const wrapper = doc.createElement("div");
       wrapper.style.display = "flex";
       wrapper.style.alignItems = "center";
@@ -4109,7 +4151,10 @@ ${mlzBlock}` : mlzBlock;
             currentDisplayValue = option.displayText;
             currentRawValue = option.code;
             hidePopup();
-            await onSelect?.(option);
+            if (lastCommittedRawValue !== option.code) {
+              lastCommittedRawValue = option.code;
+              await onSelect?.(option);
+            }
           });
           popup.appendChild(row);
         }
@@ -4135,14 +4180,16 @@ ${mlzBlock}` : mlzBlock;
         currentDisplayValue = match.displayText;
         currentRawValue = match.code;
         hidePopup();
-        await onSelect?.(match);
+        if (lastCommittedRawValue !== match.code) {
+          lastCommittedRawValue = match.code;
+          await onSelect?.(match);
+        }
       };
       input.addEventListener("input", renderOptions);
       input.addEventListener("focus", () => {
         if (typeof input.select === "function") input.select();
         renderOptions();
       });
-      input.addEventListener("change", resolveSelectedOption);
       input.addEventListener("blur", resolveSelectedOption);
       input.addEventListener("keydown", (event) => {
         const key = String(event.key || "");
@@ -4310,6 +4357,15 @@ ${mlzBlock}` : mlzBlock;
       this._setStoredExtraPeople(item, extraPersonType, people);
       return people.length - 1;
     }
+    _setStoredExtraPersonForRow(item, extraPersonType, row, person) {
+      if (!person) return this._getExtraPersonStorageIndex(row);
+      const storageIndex = this._getExtraPersonStorageIndex(row);
+      if (storageIndex == null) {
+        return this._appendStoredExtraPerson(item, extraPersonType, person);
+      }
+      this._setStoredExtraPersonAtIndex(item, extraPersonType, storageIndex, person);
+      return storageIndex;
+    }
     _setStoredExtraPersonAtIndex(item, extraPersonType, index, person) {
       if (!person) return;
       const people = this._getStoredExtraPeople(item, extraPersonType);
@@ -4357,14 +4413,15 @@ ${mlzBlock}` : mlzBlock;
       const lastName = String(person.lastName || "").trim();
       return `${firstName}${firstName && lastName ? " " : ""}${lastName}`.trim();
     }
-    _extraPersonFromCreatorFields(fields) {
+    _extraPersonFromCreatorFields(fields, existingPerson = null) {
       if (!fields || typeof fields !== "object") return null;
-      const fieldMode = Number(fields.fieldMode) || 0;
-      const name = String(fields.name || "").trim();
-      const firstName = String(fields.firstName || "").trim();
-      const lastName = String(fields.lastName || "").trim();
+      const has = (key) => Object.prototype.hasOwnProperty.call(fields, key);
+      const fieldMode = has("fieldMode") ? Number(fields.fieldMode) || 0 : existingPerson?.name ? 1 : 0;
+      const name = String(has("name") ? fields.name || "" : existingPerson?.name || "").trim();
+      const firstName = String(has("firstName") ? fields.firstName || "" : existingPerson?.firstName || "").trim();
+      const lastName = String(has("lastName") ? fields.lastName || "" : existingPerson?.lastName || "").trim();
       if (name) return { name };
-      if (!firstName && !lastName) return null;
+      if (!firstName && !lastName) return existingPerson || null;
       if (fieldMode === 1) {
         return { name: lastName || firstName };
       }
@@ -4472,7 +4529,6 @@ ${mlzBlock}` : mlzBlock;
         item.setField("extra", nextExtra);
         item.setField("court", "");
         await item.saveTx({ skipDateModifiedUpdate: true });
-        this._scheduleActiveInfoPaneRefresh(75, true);
         try {
           Zotero.debug(`[Citation Phoenix] jurisdiction row saved: item=${String(item.id)} jurisdiction=${selectedCode}`);
         } catch (e) {
@@ -4509,7 +4565,6 @@ ${mlzBlock}` : mlzBlock;
           if (!targetOptions.length) {
             item.setField("court", "");
             await item.saveTx({ skipDateModifiedUpdate: true });
-            this._scheduleActiveInfoPaneRefresh(75, true);
             try {
               Zotero.debug(`[Citation Phoenix] court row cleared for jurisdiction with no institution-part: item=${String(item.id)} jurisdiction=${targetJurisdiction}`);
             } catch (e) {
@@ -4519,7 +4574,6 @@ ${mlzBlock}` : mlzBlock;
         }
         item.setField("court", normalizedKey);
         await item.saveTx({ skipDateModifiedUpdate: true });
-        this._scheduleActiveInfoPaneRefresh(75, true);
         try {
           Zotero.debug(`[Citation Phoenix] court row saved: item=${String(item.id)} court=${normalizedKey} jurisdiction=${targetJurisdiction || "unchanged"}`);
         } catch (e) {
@@ -4666,12 +4720,6 @@ ${mlzBlock}` : mlzBlock;
         if (option.kind === "custom") {
           menuitem.setAttribute("data-ibcslm-custom-item-type", option.itemType);
         }
-        menuitem.addEventListener("command", async () => {
-          menulist.value = option.value;
-          menulist.setAttribute("label", option.label);
-          menulist.setAttribute("data-ibcslm-option-key", optionKey);
-          await this._saveItemTypeSelection(item, option);
-        });
         popup.appendChild(menuitem);
       }
       const currentOption = this._getCurrentItemTypeOption(item, nativeOptions);
@@ -4854,7 +4902,6 @@ ${mlzBlock}` : mlzBlock;
           item.setField("extra", nextExtra);
         }
         await item.saveTx({ skipDateModifiedUpdate: true });
-        this._scheduleActiveInfoPaneRefresh(75, true);
         try {
           Zotero.debug(`[Citation Phoenix] item type saved: item=${String(item.id || "")} native=${targetNativeType} custom=${targetCustomType || "(none)"}`);
         } catch (e) {
@@ -4901,14 +4948,34 @@ ${mlzBlock}` : mlzBlock;
       if (!table) return;
       const itemTypeName = this._getItemTypeName(item);
       const definitions = this.schemaConfig?.getFieldDefinitionsForItemType?.(itemTypeName) || [];
+      this._materializeRegisteredSchemaInfoRows(infoBox, definitions);
       for (const definition of definitions) {
         if (!this._shouldUseSchemaInfoRow(item, definition)) continue;
+        if (this._shouldUseRegisteredSchemaInfoRow(item, definition) && this._registeredSchemaRowsByField.has(String(definition.field || "").trim())) {
+          const registeredRow = this._findRegisteredSchemaInfoRow(infoBox, definition.field);
+          if (registeredRow) {
+            registeredRow.hidden = false;
+            this._hideSchemaBaseFieldRow(infoBox, item, definition);
+            continue;
+          }
+          continue;
+        }
         if (options.preserveLayout && this._findSchemaInfoRow(infoBox, definition.field)) continue;
         const row = this._buildSchemaFieldRow(infoBox, item, definition, !!infoBox.editable);
         if (!row) continue;
         table.appendChild(row);
         this._hideSchemaBaseFieldRow(infoBox, item, definition);
       }
+    }
+    _materializeRegisteredSchemaInfoRows(infoBox, definitions = []) {
+      if (typeof infoBox?.renderCustomRows !== "function") return;
+      const hasMissingRow = definitions.some((definition) => {
+        const field = String(definition?.field || "").trim();
+        return this._shouldUseRegisteredSchemaInfoRow(infoBox.item, definition) && this._registeredSchemaRowsByField.has(field) && !this._findRegisteredSchemaInfoRow(infoBox, field);
+      });
+      if (!hasMissingRow) return;
+      infoBox._lastUpdateCustomRows = "__citation-phoenix-refresh__";
+      infoBox.renderCustomRows();
     }
     _cleanupRegisteredSchemaInfoRows(infoBox) {
       this._removeSchemaFieldRows(infoBox);
@@ -4921,6 +4988,21 @@ ${mlzBlock}` : mlzBlock;
       return infoBox?.querySelector?.(
         `[data-ibcslm-schema-field-row="true"][data-ibcslm-schema-field="${String(fieldName || "").trim()}"]`
       ) || null;
+    }
+    _findRegisteredSchemaInfoRow(infoBox, fieldName) {
+      const field = String(fieldName || "").trim();
+      const item = infoBox?.item;
+      const definition = this._getSchemaInfoRowDefinition(item, field);
+      if (!this._shouldUseRegisteredSchemaInfoRow(item, definition)) return null;
+      const registeredID = this._registeredSchemaRowsByField.get(field);
+      if (!registeredID) return null;
+      const expected = String(registeredID);
+      const declared = this._getSchemaInfoRowID(field);
+      for (const row of infoBox?.querySelectorAll?.("[data-custom-row-id]") || []) {
+        const rowID = String(row.getAttribute?.("data-custom-row-id") || "");
+        if (rowID === expected || rowID === declared || rowID.endsWith(`-${declared}`)) return row;
+      }
+      return null;
     }
     _buildSchemaFieldRow(infoBox, item, definition, editable) {
       const fieldName = String(definition?.field || "").trim();
@@ -5006,13 +5088,9 @@ ${mlzBlock}` : mlzBlock;
         row.removeAttribute("data-ibcslm-schema-hidden-base-row");
       }
     }
-    _applySchemaSequence(infoBox, options = {}) {
+    _applySchemaSequence(infoBox) {
       const table = this._getInfoTable(infoBox);
       if (!table) return;
-      const forceNativeRows = !!options.forceNativeRows;
-      const markInitialized = options.markInitialized !== false;
-      const sequenceState = this._getSchemaSequenceState(infoBox);
-      const shouldResequenceNativeRows = forceNativeRows || !sequenceState.initialized;
       const sequence = this.schemaConfig?.getSequenceForItemType?.(this._getItemTypeName(infoBox?.item)) || [];
       const itemTypeRow = this._findItemTypeRow(infoBox);
       if (!itemTypeRow || itemTypeRow.parentNode !== table) return;
@@ -5022,8 +5100,7 @@ ${mlzBlock}` : mlzBlock;
         if (this._isSchemaTitleField(fieldName)) continue;
         const row = this._findSchemaSequenceRow(infoBox, fieldName);
         if (!row || row.hidden || row.parentNode !== table) continue;
-        const canMoveRow = shouldResequenceNativeRows || this._isPluginManagedInfoRow(row);
-        if (!canMoveRow || rows.includes(row)) continue;
+        if (rows.includes(row)) continue;
         rows.push(row);
         this._appendSchemaCompanionRows(infoBox, table, rows, fieldName);
       }
@@ -5035,159 +5112,6 @@ ${mlzBlock}` : mlzBlock;
         cursor = row.nextSibling;
       }
       this._placeCustomCourtAfterCourt(infoBox, table);
-      if (markInitialized) {
-        this._setSchemaSequenceState(infoBox);
-      }
-    }
-    _scheduleInitialSchemaSequenceRetry(infoBox) {
-      const sequenceState = this._getSchemaSequenceState(infoBox);
-      if (!sequenceState.key) return;
-      if (sequenceState.initialized && this._isSchemaSequenceSatisfied(infoBox)) return;
-      if (this._schemaSequenceRetryTimer && this._schemaSequenceRetryKey === sequenceState.key) return;
-      if (this._schemaSequenceRetryTimer) {
-        clearTimeout(this._schemaSequenceRetryTimer);
-      }
-      this._schemaSequenceRetryKey = sequenceState.key;
-      this._schemaSequenceRetryTimer = setTimeout(() => {
-        this._schemaSequenceRetryTimer = null;
-        this._schemaSequenceRetryKey = "";
-        const activeInfoBox = this._getActiveInfoBox?.();
-        if (!activeInfoBox || this._getSchemaSequenceState(activeInfoBox).key !== sequenceState.key) return;
-        if (this._isEditingInInfoBox(activeInfoBox)) {
-          this._scheduleInitialSchemaSequenceRetry(activeInfoBox);
-          return;
-        }
-        this._applySchemaSequence(activeInfoBox, { forceNativeRows: true, markInitialized: false });
-        const sequenceStatus = this._getSchemaSequenceStatus(activeInfoBox);
-        if (sequenceStatus.satisfied) {
-          this._setSchemaSequenceState(activeInfoBox, true);
-          try {
-            Zotero.debug(`[Citation Phoenix] initial schema field order applied after idle render: found=${sequenceStatus.foundFields.join(",")}`);
-          } catch (e) {
-          }
-          return;
-        }
-        this._setSchemaSequenceState(activeInfoBox, false, Number(sequenceState.attempts || 0) + 1);
-        if (Number(sequenceState.attempts || 0) < 5) {
-          this._scheduleInitialSchemaSequenceRetry(activeInfoBox);
-        } else {
-          try {
-            Zotero.debug(`[Citation Phoenix] initial schema field order incomplete after retries: item=${String(activeInfoBox?.item?.id || "")} type=${this._getItemTypeName(activeInfoBox?.item)} reason=${sequenceStatus.reason} found=${sequenceStatus.foundFields.join(",")}`);
-          } catch (e) {
-          }
-        }
-      }, 300);
-    }
-    _watchSchemaSequence(infoBox) {
-      const table = this._getInfoTable(infoBox);
-      const sequenceState = this._getSchemaSequenceState(infoBox);
-      if (!table || !sequenceState.key) {
-        this._disconnectSchemaSequenceObserver();
-        return;
-      }
-      if (this._schemaSequenceObserver && this._schemaSequenceObserverTable === table && this._schemaSequenceObserverKey === sequenceState.key) {
-        return;
-      }
-      this._disconnectSchemaSequenceObserver();
-      const MutationObserverCtor = table.ownerDocument?.defaultView?.MutationObserver;
-      if (typeof MutationObserverCtor !== "function") return;
-      this._schemaSequenceObserverTable = table;
-      this._schemaSequenceObserverKey = sequenceState.key;
-      this._schemaSequenceObserver = new MutationObserverCtor((mutations) => {
-        if (this._schemaSequenceObserverSuppressed) return;
-        if (!Array.isArray(mutations) || !mutations.some((mutation) => mutation?.type === "childList")) return;
-        this._scheduleObservedSchemaSequenceApply(sequenceState.key);
-      });
-      this._schemaSequenceObserver.observe(table, { childList: true });
-    }
-    _scheduleObservedSchemaSequenceApply(sequenceKey) {
-      const key = String(sequenceKey || "");
-      if (!key) return;
-      if (this._schemaSequenceObserverTimer) {
-        clearTimeout(this._schemaSequenceObserverTimer);
-      }
-      this._schemaSequenceObserverTimer = setTimeout(() => {
-        this._schemaSequenceObserverTimer = null;
-        const activeInfoBox = this._getActiveInfoBox?.();
-        if (!activeInfoBox || this._getSchemaSequenceState(activeInfoBox).key !== key) return;
-        if (this._isEditingInInfoBox(activeInfoBox)) {
-          this._scheduleInitialSchemaSequenceRetry(activeInfoBox);
-          return;
-        }
-        const beforeStatus = this._getSchemaSequenceStatus(activeInfoBox);
-        if (beforeStatus.satisfied) return;
-        this._schemaSequenceObserverSuppressed = true;
-        try {
-          this._applySchemaSequence(activeInfoBox, { forceNativeRows: true, markInitialized: false });
-        } finally {
-          setTimeout(() => {
-            this._schemaSequenceObserverSuppressed = false;
-          }, 0);
-        }
-        const afterStatus = this._getSchemaSequenceStatus(activeInfoBox);
-        if (afterStatus.satisfied) {
-          this._setSchemaSequenceState(activeInfoBox, true);
-          try {
-            Zotero.debug(`[Citation Phoenix] schema field order restored after Zotero DOM mutation: found=${afterStatus.foundFields.join(",")}`);
-          } catch (e) {
-          }
-        } else {
-          this._setSchemaSequenceState(activeInfoBox, false);
-          try {
-            Zotero.debug(`[Citation Phoenix] schema field order unresolved after Zotero DOM mutation: reason=${afterStatus.reason} found=${afterStatus.foundFields.join(",")}`);
-          } catch (e) {
-          }
-        }
-      }, 50);
-    }
-    _disconnectSchemaSequenceObserver() {
-      if (this._schemaSequenceObserverTimer) {
-        clearTimeout(this._schemaSequenceObserverTimer);
-        this._schemaSequenceObserverTimer = null;
-      }
-      if (this._schemaSequenceObserver) {
-        try {
-          this._schemaSequenceObserver.disconnect();
-        } catch (e) {
-        }
-      }
-      this._schemaSequenceObserver = null;
-      this._schemaSequenceObserverTable = null;
-      this._schemaSequenceObserverKey = "";
-      this._schemaSequenceObserverSuppressed = false;
-    }
-    _isSchemaSequenceSatisfied(infoBox) {
-      return this._getSchemaSequenceStatus(infoBox).satisfied;
-    }
-    _getSchemaSequenceStatus(infoBox) {
-      const table = this._getInfoTable(infoBox);
-      if (!table) return { satisfied: true, reason: "no-table", foundFields: [] };
-      const sequence = this.schemaConfig?.getSequenceForItemType?.(this._getItemTypeName(infoBox?.item)) || [];
-      const rows = [];
-      const foundFields = [];
-      for (const fieldName of sequence) {
-        if (this._isSchemaTitleField(fieldName)) continue;
-        const row = this._findSchemaSequenceRow(infoBox, fieldName);
-        if (!row || row.hidden || row.parentNode !== table || rows.includes(row)) continue;
-        rows.push(row);
-        foundFields.push(String(fieldName || "").trim());
-        this._appendSchemaCompanionRows(infoBox, table, rows, fieldName, foundFields);
-      }
-      const minimumUsefulRows = Math.min(4, Math.max(1, sequence.length - 1));
-      if (rows.length < minimumUsefulRows) {
-        return { satisfied: false, reason: `too-few-rows:${rows.length}/${minimumUsefulRows}`, foundFields };
-      }
-      const itemTypeRow = this._findItemTypeRow(infoBox);
-      const schemaStart = this._getSchemaSequenceStart(infoBox, table, itemTypeRow);
-      if (itemTypeRow?.parentNode === table && schemaStart !== rows[0]) {
-        return { satisfied: false, reason: "first-row-not-after-item-type", foundFields };
-      }
-      for (let idx = 0; idx < rows.length - 1; idx += 1) {
-        if (rows[idx].nextSibling !== rows[idx + 1]) {
-          return { satisfied: false, reason: "rows-not-contiguous", foundFields };
-        }
-      }
-      return { satisfied: true, reason: "ok", foundFields };
     }
     _getSchemaSequenceStart(infoBox, table, itemTypeRow) {
       if (!itemTypeRow || itemTypeRow.parentNode !== table) return null;
@@ -5232,6 +5156,8 @@ ${mlzBlock}` : mlzBlock;
     _findSchemaSequenceRow(infoBox, fieldName) {
       const field = String(fieldName || "").trim();
       if (!field) return null;
+      const registered = this._findRegisteredSchemaInfoRow(infoBox, field);
+      if (registered) return registered;
       const direct = this._findInfoFieldRow(infoBox, field);
       if (direct) return direct;
       const item = infoBox?.item;
@@ -5253,34 +5179,6 @@ ${mlzBlock}` : mlzBlock;
       if (rows.includes(customCourtRow)) return;
       rows.push(customCourtRow);
       foundFields?.push?.("custom-court");
-    }
-    _getSchemaSequenceState(infoBox) {
-      const itemID = String(infoBox?.item?.id || "");
-      const itemTypeName = this._getItemTypeName(infoBox?.item);
-      const currentKey = `${itemID}::${itemTypeName}`;
-      const existing = infoBox?._ibcslmSchemaSequenceState || null;
-      if (existing?.key === currentKey) return existing;
-      return { key: currentKey, initialized: false, attempts: 0 };
-    }
-    _setSchemaSequenceState(infoBox, initialized = true, attempts = 0) {
-      if (!infoBox) return;
-      const itemID = String(infoBox?.item?.id || "");
-      const itemTypeName = this._getItemTypeName(infoBox?.item);
-      infoBox._ibcslmSchemaSequenceState = {
-        key: `${itemID}::${itemTypeName}`,
-        initialized: !!initialized,
-        attempts: Math.max(0, Number(attempts) || 0)
-      };
-    }
-    _isPluginManagedInfoRow(row) {
-      if (!row) return false;
-      if (row.getAttribute?.("data-ibcslm-schema-field-row") === "true") return true;
-      const rowID = String(row.id || "");
-      return [
-        this._jurisdictionRowID,
-        this._customCourtRowID,
-        this._commenterRowID
-      ].includes(rowID);
     }
     _getFieldNameFromBaseForType(itemTypeID, baseField) {
       const name = String(baseField || "").trim();
@@ -5581,12 +5479,6 @@ ${mlzBlock}` : mlzBlock;
           await this._saveSchemaFieldValue(item, definition, nextValue);
         };
         valueElem.addEventListener?.("change", saveValue2);
-        valueElem.addEventListener?.("blur", saveValue2);
-        valueElem.addEventListener?.("keydown", (event) => {
-          if (event.key !== "Enter") return;
-          event.preventDefault();
-          saveValue2();
-        });
         return valueElem;
       }
       const doc = infoBox?.ownerDocument;
@@ -5608,12 +5500,6 @@ ${mlzBlock}` : mlzBlock;
         await this._saveSchemaFieldValue(item, definition, nextValue);
       };
       input.addEventListener("change", saveValue);
-      input.addEventListener("blur", saveValue);
-      input.addEventListener("keydown", (event) => {
-        if (event.key !== "Enter") return;
-        event.preventDefault();
-        saveValue();
-      });
       return input;
     }
     _buildSchemaCheckboxValueControl(doc, item, definition, value, editable) {
@@ -5640,11 +5526,12 @@ ${mlzBlock}` : mlzBlock;
       });
       return input;
     }
-    async _saveSchemaFieldValue(item, definition, rawValue) {
-      if (!item?.setField || !definition?.field) return;
+    async _saveSchemaFieldValue(item, definition, rawValue, _options = {}) {
+      if (!item?.setField || !definition?.field) return false;
       const fieldName = String(definition.field || "").trim();
       const nativeFieldName = this._resolveNativeFieldName(item.itemTypeID, fieldName, definition.baseField);
-      const value = String(rawValue == null ? "" : rawValue).trim();
+      const inputValue = String(rawValue == null ? "" : rawValue).trim();
+      const value = definition.kind === "date" ? this._normalizeSchemaDateInput(inputValue) : inputValue;
       const extra = String(item.getField?.("extra") || "");
       let nextExtra = extra;
       let changed = false;
@@ -5652,12 +5539,12 @@ ${mlzBlock}` : mlzBlock;
         const normalized = this._normalizeJurisdictionValue(value);
         const displayValue = this.abbrevService.formatJurisdictionDisplay(normalized);
         nextExtra = this.Jurisdiction.updateMLZJurisdiction?.(extra, normalized, displayValue) ?? extra;
-        if (nativeFieldName) {
+        if (nativeFieldName && String(item.getField?.(nativeFieldName) || "").trim() !== normalized) {
           item.setField(nativeFieldName, normalized);
           changed = true;
         }
       } else {
-        if (nativeFieldName) {
+        if (nativeFieldName && String(item.getField?.(nativeFieldName) || "").trim() !== value) {
           item.setField(nativeFieldName, value);
           changed = true;
         }
@@ -5667,12 +5554,9 @@ ${mlzBlock}` : mlzBlock;
         item.setField("extra", nextExtra);
         changed = true;
       }
-      if (!changed) return;
+      if (!changed) return false;
       await item.saveTx({ skipDateModifiedUpdate: true });
-      try {
-        this._scheduleActiveInfoPaneRefresh(75, !!nativeFieldName);
-      } catch (e) {
-      }
+      return true;
     }
     _patchRetrieveItem() {
       const sysProto = Zotero?.Cite?.System?.prototype;
@@ -7239,6 +7123,20 @@ ${mlzBlock}` : mlzBlock;
     } catch (e) {
     }
   }
+  function _installInfoRowLocalization() {
+    const mainWindow = Zotero?.getMainWindow?.();
+    const doc = mainWindow?.document;
+    if (!doc || typeof mainWindow?.MozXULElement?.insertFTLIfNeeded !== "function") return null;
+    const existing = doc.querySelector?.('link[href="citation-phoenix.ftl"]') || null;
+    mainWindow.MozXULElement.insertFTLIfNeeded("citation-phoenix.ftl");
+    return existing ? null : doc.querySelector?.('link[href="citation-phoenix.ftl"]') || null;
+  }
+  function _removeInfoRowLocalization(link) {
+    try {
+      link?.remove?.();
+    } catch (e) {
+    }
+  }
   async function _readInstalledStyleXML(installedStyle) {
     const path = installedStyle?.file?.path || installedStyle?.path || "";
     if (!path) return "";
@@ -7519,7 +7417,8 @@ ${mlzBlock}` : mlzBlock;
       caseCourtMapper: null,
       schemaConfig: null,
       patcher: null,
-      prefsUI: null
+      prefsUI: null,
+      infoRowLocalizationLink: null
     };
     await _ctx.data.init();
     await _ensureBundledStylesInstalled({ rootURI, dataStore: _ctx.data });
@@ -7532,6 +7431,7 @@ ${mlzBlock}` : mlzBlock;
     await _ctx.caseCourtMapper.preload();
     _ctx.schemaConfig = new SchemaConfig({ dataStore: _ctx.data });
     await _ctx.schemaConfig.preload();
+    _ctx.infoRowLocalizationLink = _installInfoRowLocalization();
     _ctx.patcher = new Patcher({
       pluginID: id,
       moduleLoader: _ctx.modules,
@@ -7556,6 +7456,27 @@ ${mlzBlock}` : mlzBlock;
     } catch (e) {
     }
     Zotero.CitationPhoenixBridge = {
+      getSchemaUIAuditSpec() {
+        const schema = _ctx?.schemaConfig;
+        if (!schema) return { itemTypes: [] };
+        const itemTypes = [];
+        for (const itemType of schema.getKnownItemTypeNames?.() || []) {
+          const sequence = schema.getSequenceForItemType?.(itemType) || [];
+          if (!sequence.length) continue;
+          itemTypes.push({
+            itemType,
+            baseItemType: schema.getBaseItemType?.(itemType) || itemType,
+            custom: !!schema.isCustomItemType?.(itemType),
+            sequence: [...sequence],
+            fields: (schema.getFieldDefinitionsForItemType?.(itemType) || []).map((definition) => ({
+              field: String(definition?.field || ""),
+              baseField: String(definition?.baseField || ""),
+              kind: String(definition?.kind || "field")
+            }))
+          });
+        }
+        return { itemTypes };
+      },
       listPrimaryDatasetOptions() {
         return _ctx?.abbrevs?.listPrimaryDatasetOptions?.() || [];
       },
@@ -7646,6 +7567,7 @@ ${mlzBlock}` : mlzBlock;
       }
       _ctx?.prefsUI?.unregister?.();
       _ctx?.patcher?.unpatch();
+      _removeInfoRowLocalization(_ctx?.infoRowLocalizationLink);
     } finally {
       _diagnostic("[Citation Phoenix] deactivate complete");
       _ctx = null;

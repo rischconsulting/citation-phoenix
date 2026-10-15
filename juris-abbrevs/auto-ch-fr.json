@@ -1,19 +1,21 @@
 {
   "filename": "auto-ch-fr.json",
   "name": "Switzerland",
-  "version": "2026-07-22 20:44:51 UTC",
+  "version": "2026-10-15 18:49:00 UTC",
   "xdata": {
     "default": {
       "place": {
         "CH": "Switzerland",
         "CH:AARGAU": "Aargau",
         "CH:APPENZELL.AUSSERRHODEN": "Appenzell-Ausserrhoden",
+        "CH:APPENZELL.INNERRHODEN": "Appenzell-Innerrhoden",
         "CH:BASEL.LANDSCHAFT": "Basel-Landschaft",
         "CH:BASEL.STADT": "Basel-Stadt",
         "CH:BERN": "Bern",
         "CH:FRIBOURG": "Fribourg",
         "CH:GENEVA": "Geneva",
         "CH:GLARUS": "Glarus",
+        "CH:GRAUBUNDEN": "Graubünden",
         "CH:JURA": "Jura",
         "CH:LUZERN": "Luzern",
         "CH:NEUCHATEL": "Neuchâtel",
@@ -35,131 +37,386 @@
     "ch": {
       "institution-part": {
         "fcc": "TPF",
+        "fsc": "ATF",
+        "fac": "ATAF",
+        "fpc": "Tribunal fédéral des brevets"
+      },
+      "institution-entire": {
+        "fcc": "TPF",
         "fsc": "TF",
         "fac": "TAF",
-        "fpc": "TBF"
+        "fpc": "TFB"
       }
     },
     "ch:aargau": {
       "institution-part": {
-        "obergericht": "OGer"
+        "bezirksgericht": "Tribunal d'arrondissement",
+        "obergericht": "Obergericht",
+        "verwaltungsgericht": "Tribunal administratif",
+        "zwangsmassnahmengericht": "Tribunal des mesures de contrainte"
+      },
+      "institution-entire": {
+        "bezirksgericht": "TA",
+        "obergericht": "TC-AG",
+        "verwaltungsgericht": "TA AG",
+        "zwangsmassnahmengericht": "TMC"
       }
     },
     "ch:appenzell.ausserrhoden": {
       "institution-part": {
-        "obergericht": "OGer"
+        "bezirksgericht": "Tribunal d'arrondissement",
+        "obergericht": "Obergericht",
+        "verwaltungsgericht": "Tribunal administratif",
+        "zwangsmassnahmengericht": "Tribunal des mesures de contrainte"
+      },
+      "institution-entire": {
+        "bezirksgericht": "TA",
+        "obergericht": "TC-AR",
+        "verwaltungsgericht": "TA AR",
+        "zwangsmassnahmengericht": "TMC"
+      }
+    },
+    "ch:appenzell.innerrhoden": {
+      "institution-part": {
+        "bezirksgericht": "Tribunal d'arrondissement",
+        "kantonsgericht": "Kantonsgericht",
+        "verwaltungsgericht": "Tribunal administratif",
+        "zwangsmassnahmengericht": "Tribunal des mesures de contrainte"
+      },
+      "institution-entire": {
+        "bezirksgericht": "TA",
+        "kantonsgericht": "TC-AI",
+        "verwaltungsgericht": "TA AI",
+        "zwangsmassnahmengericht": "TMC"
       }
     },
     "ch:basel.landschaft": {
       "institution-part": {
-        "obergericht": "OGer"
+        "bezirksgericht": "Tribunal d'arrondissement",
+        "obergericht": "Obergericht",
+        "verwaltungsgericht": "Tribunal administratif",
+        "zwangsmassnahmengericht": "Tribunal des mesures de contrainte"
+      },
+      "institution-entire": {
+        "bezirksgericht": "TA",
+        "obergericht": "TC-BL",
+        "verwaltungsgericht": "TA BL",
+        "zwangsmassnahmengericht": "TMC"
       }
     },
     "ch:basel.stadt": {
       "institution-part": {
-        "appellationsgericht": "AppGer"
+        "appellationsgericht": "Appellationsgericht",
+        "bezirksgericht": "Tribunal d'arrondissement",
+        "verwaltungsgericht": "Tribunal administratif",
+        "zwangsmassnahmengericht": "Tribunal des mesures de contrainte"
+      },
+      "institution-entire": {
+        "appellationsgericht": "TC-BS",
+        "bezirksgericht": "TA",
+        "verwaltungsgericht": "TA BS",
+        "zwangsmassnahmengericht": "TMC"
       }
     },
     "ch:bern": {
       "institution-part": {
-        "obergericht": "OGer"
+        "bezirksgericht": "Tribunal d'arrondissement",
+        "obergericht": "Obergericht",
+        "verwaltungsgericht": "Tribunal administratif",
+        "zwangsmassnahmengericht": "Tribunal des mesures de contrainte"
+      },
+      "institution-entire": {
+        "bezirksgericht": "TA",
+        "obergericht": "TC-BE",
+        "verwaltungsgericht": "TA BE",
+        "zwangsmassnahmengericht": "TMC"
       }
     },
     "ch:fribourg": {
       "institution-part": {
-        "tribunal.cantonal": "TC"
+        "bezirksgericht": "Tribunal d'arrondissement",
+        "tribunal.cantonal": "Tribunal cantonal",
+        "verwaltungsgericht": "Tribunal administratif",
+        "zwangsmassnahmengericht": "Tribunal des mesures de contrainte"
+      },
+      "institution-entire": {
+        "bezirksgericht": "TA",
+        "tribunal.cantonal": "TC-FR",
+        "verwaltungsgericht": "TA FR",
+        "zwangsmassnahmengericht": "TMC"
       }
     },
     "ch:geneva": {
       "institution-part": {
-        "cour.de.cassation": "Cour de cassation"
+        "bezirksgericht": "Tribunal d'arrondissement",
+        "cour.de.cassation": "Cour de cassation",
+        "cour.de.justice": "Cour de justice",
+        "verwaltungsgericht": "Tribunal administratif",
+        "zwangsmassnahmengericht": "Tribunal des mesures de contrainte"
+      },
+      "institution-entire": {
+        "bezirksgericht": "TA",
+        "cour.de.justice": "TC-GE",
+        "verwaltungsgericht": "TA GE",
+        "zwangsmassnahmengericht": "TMC"
       }
     },
     "ch:glarus": {
       "institution-part": {
-        "obergericht": "OGer"
+        "bezirksgericht": "Tribunal d'arrondissement",
+        "obergericht": "Obergericht",
+        "verwaltungsgericht": "Tribunal administratif",
+        "zwangsmassnahmengericht": "Tribunal des mesures de contrainte"
+      },
+      "institution-entire": {
+        "bezirksgericht": "TA",
+        "obergericht": "TC-GL",
+        "verwaltungsgericht": "TA GL",
+        "zwangsmassnahmengericht": "TMC"
+      }
+    },
+    "ch:graubunden": {
+      "institution-part": {
+        "bezirksgericht": "Tribunal d'arrondissement",
+        "kantonsgericht": "Kantonsgericht",
+        "verwaltungsgericht": "Tribunal administratif",
+        "zwangsmassnahmengericht": "Tribunal des mesures de contrainte"
+      },
+      "institution-entire": {
+        "bezirksgericht": "TA",
+        "kantonsgericht": "TC-GR",
+        "verwaltungsgericht": "TA GR",
+        "zwangsmassnahmengericht": "TMC"
       }
     },
     "ch:jura": {
       "institution-part": {
-        "tribunal.cantonal": "TC"
+        "bezirksgericht": "Tribunal d'arrondissement",
+        "tribunal.cantonal": "Tribunal cantonal",
+        "verwaltungsgericht": "Tribunal administratif",
+        "zwangsmassnahmengericht": "Tribunal des mesures de contrainte"
+      },
+      "institution-entire": {
+        "bezirksgericht": "TA",
+        "tribunal.cantonal": "TC-JU",
+        "verwaltungsgericht": "TA JU",
+        "zwangsmassnahmengericht": "TMC"
       }
     },
     "ch:luzern": {
       "institution-part": {
-        "obergericht": "OGer"
+        "bezirksgericht": "Tribunal d'arrondissement",
+        "obergericht": "Obergericht",
+        "verwaltungsgericht": "Tribunal administratif",
+        "zwangsmassnahmengericht": "Tribunal des mesures de contrainte"
+      },
+      "institution-entire": {
+        "bezirksgericht": "TA",
+        "obergericht": "TC-LU",
+        "verwaltungsgericht": "TA LU",
+        "zwangsmassnahmengericht": "TMC"
       }
     },
     "ch:neuchatel": {
       "institution-part": {
-        "tribunal.cantonal": "TC"
+        "bezirksgericht": "Tribunal d'arrondissement",
+        "tribunal.cantonal": "Tribunal cantonal",
+        "verwaltungsgericht": "Tribunal administratif",
+        "zwangsmassnahmengericht": "Tribunal des mesures de contrainte"
+      },
+      "institution-entire": {
+        "bezirksgericht": "TA",
+        "tribunal.cantonal": "TC-NE",
+        "verwaltungsgericht": "TA NE",
+        "zwangsmassnahmengericht": "TMC"
       }
     },
     "ch:nidwalden": {
       "institution-part": {
-        "obergericht": "OGer"
+        "bezirksgericht": "Tribunal d'arrondissement",
+        "obergericht": "Obergericht",
+        "verwaltungsgericht": "Tribunal administratif",
+        "zwangsmassnahmengericht": "Tribunal des mesures de contrainte"
+      },
+      "institution-entire": {
+        "bezirksgericht": "TA",
+        "obergericht": "TC-NW",
+        "verwaltungsgericht": "TA NW",
+        "zwangsmassnahmengericht": "TMC"
       }
     },
     "ch:obwalden": {
       "institution-part": {
-        "obergericht": "OGer"
+        "bezirksgericht": "Tribunal d'arrondissement",
+        "obergericht": "Obergericht",
+        "verwaltungsgericht": "Tribunal administratif",
+        "zwangsmassnahmengericht": "Tribunal des mesures de contrainte"
+      },
+      "institution-entire": {
+        "bezirksgericht": "TA",
+        "obergericht": "TC-OW",
+        "verwaltungsgericht": "TA OW",
+        "zwangsmassnahmengericht": "TMC"
       }
     },
     "ch:schaffhausen": {
       "institution-part": {
-        "obergericht": "OGer"
+        "bezirksgericht": "Tribunal d'arrondissement",
+        "obergericht": "Obergericht",
+        "verwaltungsgericht": "Tribunal administratif",
+        "zwangsmassnahmengericht": "Tribunal des mesures de contrainte"
+      },
+      "institution-entire": {
+        "bezirksgericht": "TA",
+        "obergericht": "TC-SH",
+        "verwaltungsgericht": "TA SH",
+        "zwangsmassnahmengericht": "TMC"
       }
     },
     "ch:schwyz": {
       "institution-part": {
-        "kantonsgericht": "KGer"
+        "bezirksgericht": "Tribunal d'arrondissement",
+        "kantonsgericht": "Kantonsgericht",
+        "verwaltungsgericht": "Tribunal administratif",
+        "zwangsmassnahmengericht": "Tribunal des mesures de contrainte"
+      },
+      "institution-entire": {
+        "bezirksgericht": "TA",
+        "kantonsgericht": "TC-SZ",
+        "verwaltungsgericht": "TA SZ",
+        "zwangsmassnahmengericht": "TMC"
       }
     },
     "ch:solothurn": {
       "institution-part": {
-        "obergericht": "OGer"
+        "bezirksgericht": "Tribunal d'arrondissement",
+        "obergericht": "Obergericht",
+        "verwaltungsgericht": "Tribunal administratif",
+        "zwangsmassnahmengericht": "Tribunal des mesures de contrainte"
+      },
+      "institution-entire": {
+        "bezirksgericht": "TA",
+        "obergericht": "TC-SO",
+        "verwaltungsgericht": "TA SO",
+        "zwangsmassnahmengericht": "TMC"
       }
     },
     "ch:st.gallen": {
       "institution-part": {
-        "kantonsgericht": "KGer",
-        "kassationsgericht": "KassGer"
+        "bezirksgericht": "Tribunal d'arrondissement",
+        "kantonsgericht": "Kantonsgericht",
+        "kassationsgericht": "Kassationsgericht",
+        "verwaltungsgericht": "Tribunal administratif",
+        "zwangsmassnahmengericht": "Tribunal des mesures de contrainte"
+      },
+      "institution-entire": {
+        "bezirksgericht": "TA",
+        "kantonsgericht": "TC-SG",
+        "kassationsgericht": "KassGer SG",
+        "verwaltungsgericht": "TA SG",
+        "zwangsmassnahmengericht": "TMC"
       }
     },
     "ch:thurgau": {
       "institution-part": {
-        "obergericht": "OGer"
+        "bezirksgericht": "Tribunal d'arrondissement",
+        "obergericht": "Obergericht",
+        "verwaltungsgericht": "Tribunal administratif",
+        "zwangsmassnahmengericht": "Tribunal des mesures de contrainte"
+      },
+      "institution-entire": {
+        "bezirksgericht": "TA",
+        "obergericht": "TC-TG",
+        "verwaltungsgericht": "TA TG",
+        "zwangsmassnahmengericht": "TMC"
       }
     },
     "ch:ticino": {
       "institution-part": {
-        "tribunale.d.appello": "Tribunale d'appello"
+        "bezirksgericht": "Tribunal d'arrondissement",
+        "tribunale.d.appello": "Tribunale d'appello",
+        "verwaltungsgericht": "Tribunal administratif",
+        "zwangsmassnahmengericht": "Tribunal des mesures de contrainte"
+      },
+      "institution-entire": {
+        "bezirksgericht": "TA",
+        "tribunale.d.appello": "TC-TI",
+        "verwaltungsgericht": "TA TI",
+        "zwangsmassnahmengericht": "TMC"
       }
     },
     "ch:uri": {
       "institution-part": {
-        "obergericht": "OGer"
+        "bezirksgericht": "Tribunal d'arrondissement",
+        "obergericht": "Obergericht",
+        "verwaltungsgericht": "Tribunal administratif",
+        "zwangsmassnahmengericht": "Tribunal des mesures de contrainte"
+      },
+      "institution-entire": {
+        "bezirksgericht": "TA",
+        "obergericht": "TC-UR",
+        "verwaltungsgericht": "TA UR",
+        "zwangsmassnahmengericht": "TMC"
       }
     },
     "ch:valais": {
       "institution-part": {
-        "tribunal.cantonal": "TC"
+        "bezirksgericht": "Tribunal d'arrondissement",
+        "tribunal.cantonal": "Tribunal cantonal",
+        "verwaltungsgericht": "Tribunal administratif",
+        "zwangsmassnahmengericht": "Tribunal des mesures de contrainte"
+      },
+      "institution-entire": {
+        "bezirksgericht": "TA",
+        "tribunal.cantonal": "TC-VS",
+        "verwaltungsgericht": "TA VS",
+        "zwangsmassnahmengericht": "TMC"
       }
     },
     "ch:vaud": {
       "institution-part": {
-        "tribunal.cantonal": "TC"
+        "bezirksgericht": "Tribunal d'arrondissement",
+        "tribunal.cantonal": "Tribunal cantonal",
+        "verwaltungsgericht": "Tribunal administratif",
+        "zwangsmassnahmengericht": "Tribunal des mesures de contrainte"
+      },
+      "institution-entire": {
+        "bezirksgericht": "TA",
+        "tribunal.cantonal": "TC-VD",
+        "verwaltungsgericht": "TA VD",
+        "zwangsmassnahmengericht": "TMC"
       }
     },
     "ch:zug": {
       "institution-part": {
-        "obergericht": "OGer"
+        "bezirksgericht": "Tribunal d'arrondissement",
+        "kantonsgericht": "Kantonsgericht",
+        "obergericht": "Obergericht",
+        "verwaltungsgericht": "Tribunal administratif",
+        "zwangsmassnahmengericht": "Tribunal des mesures de contrainte"
+      },
+      "institution-entire": {
+        "bezirksgericht": "TA",
+        "kantonsgericht": "KGer ZG",
+        "obergericht": "TC-ZG",
+        "verwaltungsgericht": "TA ZG",
+        "zwangsmassnahmengericht": "TMC"
       }
     },
     "ch:zurich": {
       "institution-part": {
-        "kassationsgericht": "KassGer",
-        "obergericht": "OGer"
+        "bezirksgericht": "Tribunal d'arrondissement",
+        "kassationsgericht": "Kassationsgericht",
+        "obergericht": "Obergericht",
+        "verwaltungsgericht": "Tribunal administratif",
+        "zwangsmassnahmengericht": "Tribunal des mesures de contrainte"
+      },
+      "institution-entire": {
+        "bezirksgericht": "TA",
+        "kassationsgericht": "KassGer ZH",
+        "obergericht": "TC-ZH",
+        "verwaltungsgericht": "TA ZH",
+        "zwangsmassnahmengericht": "TMC"
       }
     }
   }

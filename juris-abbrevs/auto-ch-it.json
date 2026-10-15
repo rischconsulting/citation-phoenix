@@ -1,0 +1,422 @@
+{
+  "filename": "auto-ch-it.json",
+  "name": "Switzerland",
+  "version": "2026-10-15 18:49:00 UTC",
+  "xdata": {
+    "default": {
+      "place": {
+        "CH": "Switzerland",
+        "CH:AARGAU": "Aargau",
+        "CH:APPENZELL.AUSSERRHODEN": "Appenzell-Ausserrhoden",
+        "CH:APPENZELL.INNERRHODEN": "Appenzell-Innerrhoden",
+        "CH:BASEL.LANDSCHAFT": "Basel-Landschaft",
+        "CH:BASEL.STADT": "Basel-Stadt",
+        "CH:BERN": "Bern",
+        "CH:FRIBOURG": "Fribourg",
+        "CH:GENEVA": "Geneva",
+        "CH:GLARUS": "Glarus",
+        "CH:GRAUBUNDEN": "Graubünden",
+        "CH:JURA": "Jura",
+        "CH:LUZERN": "Luzern",
+        "CH:NEUCHATEL": "Neuchâtel",
+        "CH:NIDWALDEN": "Nidwalden",
+        "CH:OBWALDEN": "Obwalden",
+        "CH:SCHAFFHAUSEN": "Schaffhausen",
+        "CH:SCHWYZ": "Schwyz",
+        "CH:SOLOTHURN": "Solothurn",
+        "CH:ST.GALLEN": "St-Gallen",
+        "CH:THURGAU": "Thurgau",
+        "CH:TICINO": "Ticino",
+        "CH:URI": "Uri",
+        "CH:VALAIS": "Valais",
+        "CH:VAUD": "Vaud",
+        "CH:ZUG": "Zug",
+        "CH:ZURICH": "Zurich"
+      }
+    },
+    "ch": {
+      "institution-part": {
+        "fcc": "TPF",
+        "fsc": "BGE",
+        "fac": "BVGE",
+        "fpc": "Bundespatentgericht"
+      },
+      "institution-entire": {
+        "fcc": "BStGer",
+        "fsc": "BGer",
+        "fac": "BVGer",
+        "fpc": "BPatGer"
+      }
+    },
+    "ch:aargau": {
+      "institution-part": {
+        "bezirksgericht": "Bezirksgericht",
+        "obergericht": "Obergericht",
+        "verwaltungsgericht": "Tribunale amministrativo",
+        "zwangsmassnahmengericht": "Zwangsmassnahmengericht"
+      },
+      "institution-entire": {
+        "bezirksgericht": "BezGer",
+        "obergericht": "OGer AG",
+        "verwaltungsgericht": "VGer AG",
+        "zwangsmassnahmengericht": "ZMG"
+      }
+    },
+    "ch:appenzell.ausserrhoden": {
+      "institution-part": {
+        "bezirksgericht": "Bezirksgericht",
+        "obergericht": "Obergericht",
+        "verwaltungsgericht": "Tribunale amministrativo",
+        "zwangsmassnahmengericht": "Zwangsmassnahmengericht"
+      },
+      "institution-entire": {
+        "bezirksgericht": "BezGer",
+        "obergericht": "OGer AR",
+        "verwaltungsgericht": "VGer AR",
+        "zwangsmassnahmengericht": "ZMG"
+      }
+    },
+    "ch:appenzell.innerrhoden": {
+      "institution-part": {
+        "bezirksgericht": "Bezirksgericht",
+        "kantonsgericht": "Kantonsgericht",
+        "verwaltungsgericht": "Tribunale amministrativo",
+        "zwangsmassnahmengericht": "Zwangsmassnahmengericht"
+      },
+      "institution-entire": {
+        "bezirksgericht": "BezGer",
+        "kantonsgericht": "KGer AI",
+        "verwaltungsgericht": "VGer AI",
+        "zwangsmassnahmengericht": "ZMG"
+      }
+    },
+    "ch:basel.landschaft": {
+      "institution-part": {
+        "bezirksgericht": "Bezirksgericht",
+        "obergericht": "Obergericht",
+        "verwaltungsgericht": "Tribunale amministrativo",
+        "zwangsmassnahmengericht": "Zwangsmassnahmengericht"
+      },
+      "institution-entire": {
+        "bezirksgericht": "BezGer",
+        "obergericht": "OGer BL",
+        "verwaltungsgericht": "VGer BL",
+        "zwangsmassnahmengericht": "ZMG"
+      }
+    },
+    "ch:basel.stadt": {
+      "institution-part": {
+        "appellationsgericht": "Appellationsgericht",
+        "bezirksgericht": "Bezirksgericht",
+        "verwaltungsgericht": "Tribunale amministrativo",
+        "zwangsmassnahmengericht": "Zwangsmassnahmengericht"
+      },
+      "institution-entire": {
+        "appellationsgericht": "AppGer BS",
+        "bezirksgericht": "BezGer",
+        "verwaltungsgericht": "VGer BS",
+        "zwangsmassnahmengericht": "ZMG"
+      }
+    },
+    "ch:bern": {
+      "institution-part": {
+        "bezirksgericht": "Bezirksgericht",
+        "obergericht": "Obergericht",
+        "verwaltungsgericht": "Tribunale amministrativo",
+        "zwangsmassnahmengericht": "Zwangsmassnahmengericht"
+      },
+      "institution-entire": {
+        "bezirksgericht": "BezGer",
+        "obergericht": "OGer BE",
+        "verwaltungsgericht": "VGer BE",
+        "zwangsmassnahmengericht": "ZMG"
+      }
+    },
+    "ch:fribourg": {
+      "institution-part": {
+        "bezirksgericht": "Bezirksgericht",
+        "tribunal.cantonal": "Tribunal cantonal",
+        "verwaltungsgericht": "Tribunale amministrativo",
+        "zwangsmassnahmengericht": "Zwangsmassnahmengericht"
+      },
+      "institution-entire": {
+        "bezirksgericht": "BezGer",
+        "tribunal.cantonal": "TC FR",
+        "verwaltungsgericht": "VGer FR",
+        "zwangsmassnahmengericht": "ZMG"
+      }
+    },
+    "ch:geneva": {
+      "institution-part": {
+        "bezirksgericht": "Bezirksgericht",
+        "cour.de.cassation": "Cour de cassation",
+        "cour.de.justice": "Cour de justice",
+        "verwaltungsgericht": "Tribunale amministrativo",
+        "zwangsmassnahmengericht": "Zwangsmassnahmengericht"
+      },
+      "institution-entire": {
+        "bezirksgericht": "BezGer",
+        "cour.de.justice": "CJ GE",
+        "verwaltungsgericht": "VGer GE",
+        "zwangsmassnahmengericht": "ZMG"
+      }
+    },
+    "ch:glarus": {
+      "institution-part": {
+        "bezirksgericht": "Bezirksgericht",
+        "obergericht": "Obergericht",
+        "verwaltungsgericht": "Tribunale amministrativo",
+        "zwangsmassnahmengericht": "Zwangsmassnahmengericht"
+      },
+      "institution-entire": {
+        "bezirksgericht": "BezGer",
+        "obergericht": "OGer GL",
+        "verwaltungsgericht": "VGer GL",
+        "zwangsmassnahmengericht": "ZMG"
+      }
+    },
+    "ch:graubunden": {
+      "institution-part": {
+        "bezirksgericht": "Bezirksgericht",
+        "kantonsgericht": "Kantonsgericht",
+        "verwaltungsgericht": "Tribunale amministrativo",
+        "zwangsmassnahmengericht": "Zwangsmassnahmengericht"
+      },
+      "institution-entire": {
+        "bezirksgericht": "BezGer",
+        "kantonsgericht": "KGer GR",
+        "verwaltungsgericht": "VGer GR",
+        "zwangsmassnahmengericht": "ZMG"
+      }
+    },
+    "ch:jura": {
+      "institution-part": {
+        "bezirksgericht": "Bezirksgericht",
+        "tribunal.cantonal": "Tribunal cantonal",
+        "verwaltungsgericht": "Tribunale amministrativo",
+        "zwangsmassnahmengericht": "Zwangsmassnahmengericht"
+      },
+      "institution-entire": {
+        "bezirksgericht": "BezGer",
+        "tribunal.cantonal": "TC JU",
+        "verwaltungsgericht": "VGer JU",
+        "zwangsmassnahmengericht": "ZMG"
+      }
+    },
+    "ch:luzern": {
+      "institution-part": {
+        "bezirksgericht": "Bezirksgericht",
+        "obergericht": "Obergericht",
+        "verwaltungsgericht": "Tribunale amministrativo",
+        "zwangsmassnahmengericht": "Zwangsmassnahmengericht"
+      },
+      "institution-entire": {
+        "bezirksgericht": "BezGer",
+        "obergericht": "OGer LU",
+        "verwaltungsgericht": "VGer LU",
+        "zwangsmassnahmengericht": "ZMG"
+      }
+    },
+    "ch:neuchatel": {
+      "institution-part": {
+        "bezirksgericht": "Bezirksgericht",
+        "tribunal.cantonal": "Tribunal cantonal",
+        "verwaltungsgericht": "Tribunale amministrativo",
+        "zwangsmassnahmengericht": "Zwangsmassnahmengericht"
+      },
+      "institution-entire": {
+        "bezirksgericht": "BezGer",
+        "tribunal.cantonal": "TC NE",
+        "verwaltungsgericht": "VGer NE",
+        "zwangsmassnahmengericht": "ZMG"
+      }
+    },
+    "ch:nidwalden": {
+      "institution-part": {
+        "bezirksgericht": "Bezirksgericht",
+        "obergericht": "Obergericht",
+        "verwaltungsgericht": "Tribunale amministrativo",
+        "zwangsmassnahmengericht": "Zwangsmassnahmengericht"
+      },
+      "institution-entire": {
+        "bezirksgericht": "BezGer",
+        "obergericht": "OGer NW",
+        "verwaltungsgericht": "VGer NW",
+        "zwangsmassnahmengericht": "ZMG"
+      }
+    },
+    "ch:obwalden": {
+      "institution-part": {
+        "bezirksgericht": "Bezirksgericht",
+        "obergericht": "Obergericht",
+        "verwaltungsgericht": "Tribunale amministrativo",
+        "zwangsmassnahmengericht": "Zwangsmassnahmengericht"
+      },
+      "institution-entire": {
+        "bezirksgericht": "BezGer",
+        "obergericht": "OGer OW",
+        "verwaltungsgericht": "VGer OW",
+        "zwangsmassnahmengericht": "ZMG"
+      }
+    },
+    "ch:schaffhausen": {
+      "institution-part": {
+        "bezirksgericht": "Bezirksgericht",
+        "obergericht": "Obergericht",
+        "verwaltungsgericht": "Tribunale amministrativo",
+        "zwangsmassnahmengericht": "Zwangsmassnahmengericht"
+      },
+      "institution-entire": {
+        "bezirksgericht": "BezGer",
+        "obergericht": "OGer SH",
+        "verwaltungsgericht": "VGer SH",
+        "zwangsmassnahmengericht": "ZMG"
+      }
+    },
+    "ch:schwyz": {
+      "institution-part": {
+        "bezirksgericht": "Bezirksgericht",
+        "kantonsgericht": "Kantonsgericht",
+        "verwaltungsgericht": "Tribunale amministrativo",
+        "zwangsmassnahmengericht": "Zwangsmassnahmengericht"
+      },
+      "institution-entire": {
+        "bezirksgericht": "BezGer",
+        "kantonsgericht": "KGer SZ",
+        "verwaltungsgericht": "VGer SZ",
+        "zwangsmassnahmengericht": "ZMG"
+      }
+    },
+    "ch:solothurn": {
+      "institution-part": {
+        "bezirksgericht": "Bezirksgericht",
+        "obergericht": "Obergericht",
+        "verwaltungsgericht": "Tribunale amministrativo",
+        "zwangsmassnahmengericht": "Zwangsmassnahmengericht"
+      },
+      "institution-entire": {
+        "bezirksgericht": "BezGer",
+        "obergericht": "OGer SO",
+        "verwaltungsgericht": "VGer SO",
+        "zwangsmassnahmengericht": "ZMG"
+      }
+    },
+    "ch:st.gallen": {
+      "institution-part": {
+        "bezirksgericht": "Bezirksgericht",
+        "kantonsgericht": "Kantonsgericht",
+        "kassationsgericht": "Kassationsgericht",
+        "verwaltungsgericht": "Tribunale amministrativo",
+        "zwangsmassnahmengericht": "Zwangsmassnahmengericht"
+      },
+      "institution-entire": {
+        "bezirksgericht": "BezGer",
+        "kantonsgericht": "KGer SG",
+        "kassationsgericht": "KassGer SG",
+        "verwaltungsgericht": "VGer SG",
+        "zwangsmassnahmengericht": "ZMG"
+      }
+    },
+    "ch:thurgau": {
+      "institution-part": {
+        "bezirksgericht": "Bezirksgericht",
+        "obergericht": "Obergericht",
+        "verwaltungsgericht": "Tribunale amministrativo",
+        "zwangsmassnahmengericht": "Zwangsmassnahmengericht"
+      },
+      "institution-entire": {
+        "bezirksgericht": "BezGer",
+        "obergericht": "OGer TG",
+        "verwaltungsgericht": "VGer TG",
+        "zwangsmassnahmengericht": "ZMG"
+      }
+    },
+    "ch:ticino": {
+      "institution-part": {
+        "bezirksgericht": "Bezirksgericht",
+        "tribunale.d.appello": "Tribunale d'appello",
+        "verwaltungsgericht": "Tribunale amministrativo",
+        "zwangsmassnahmengericht": "Zwangsmassnahmengericht"
+      },
+      "institution-entire": {
+        "bezirksgericht": "BezGer",
+        "verwaltungsgericht": "VGer TI",
+        "zwangsmassnahmengericht": "ZMG"
+      }
+    },
+    "ch:uri": {
+      "institution-part": {
+        "bezirksgericht": "Bezirksgericht",
+        "obergericht": "Obergericht",
+        "verwaltungsgericht": "Tribunale amministrativo",
+        "zwangsmassnahmengericht": "Zwangsmassnahmengericht"
+      },
+      "institution-entire": {
+        "bezirksgericht": "BezGer",
+        "obergericht": "OGer UR",
+        "verwaltungsgericht": "VGer UR",
+        "zwangsmassnahmengericht": "ZMG"
+      }
+    },
+    "ch:valais": {
+      "institution-part": {
+        "bezirksgericht": "Bezirksgericht",
+        "tribunal.cantonal": "Tribunal cantonal",
+        "verwaltungsgericht": "Tribunale amministrativo",
+        "zwangsmassnahmengericht": "Zwangsmassnahmengericht"
+      },
+      "institution-entire": {
+        "bezirksgericht": "BezGer",
+        "tribunal.cantonal": "TC VS",
+        "verwaltungsgericht": "VGer VS",
+        "zwangsmassnahmengericht": "ZMG"
+      }
+    },
+    "ch:vaud": {
+      "institution-part": {
+        "bezirksgericht": "Bezirksgericht",
+        "tribunal.cantonal": "Tribunal cantonal",
+        "verwaltungsgericht": "Tribunale amministrativo",
+        "zwangsmassnahmengericht": "Zwangsmassnahmengericht"
+      },
+      "institution-entire": {
+        "bezirksgericht": "BezGer",
+        "tribunal.cantonal": "TC VD",
+        "verwaltungsgericht": "VGer VD",
+        "zwangsmassnahmengericht": "ZMG"
+      }
+    },
+    "ch:zug": {
+      "institution-part": {
+        "bezirksgericht": "Bezirksgericht",
+        "kantonsgericht": "Kantonsgericht",
+        "obergericht": "Obergericht",
+        "verwaltungsgericht": "Tribunale amministrativo",
+        "zwangsmassnahmengericht": "Zwangsmassnahmengericht"
+      },
+      "institution-entire": {
+        "bezirksgericht": "BezGer",
+        "kantonsgericht": "KGer ZG",
+        "obergericht": "OGer ZG",
+        "verwaltungsgericht": "VGer ZG",
+        "zwangsmassnahmengericht": "ZMG"
+      }
+    },
+    "ch:zurich": {
+      "institution-part": {
+        "bezirksgericht": "Bezirksgericht",
+        "kassationsgericht": "Kassationsgericht",
+        "obergericht": "Obergericht",
+        "verwaltungsgericht": "Tribunale amministrativo",
+        "zwangsmassnahmengericht": "Zwangsmassnahmengericht"
+      },
+      "institution-entire": {
+        "bezirksgericht": "BezGer",
+        "kassationsgericht": "KassGer ZH",
+        "obergericht": "OGer ZH",
+        "verwaltungsgericht": "VGer ZH",
+        "zwangsmassnahmengericht": "ZMG"
+      }
+    }
+  }
+}

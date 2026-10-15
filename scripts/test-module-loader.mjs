@@ -8,7 +8,7 @@ const moduleLoaderURL = pathToFileURL(path.join(rootDir, 'lib', 'services', 'mod
 const { ModuleLoader } = await import(moduleLoaderURL);
 
 const indexPath = path.join(rootDir, 'style-modules', 'index.json');
-const index = JSON.parse(await fs.readFile(indexPath, 'utf8'));
+const index = JSON.parse((await fs.readFile(indexPath, 'utf8')).replace(/^\uFEFF/, ''));
 
 const fakeDataStore = {
   async loadJSON(relPath) {
