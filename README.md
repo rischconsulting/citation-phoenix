@@ -1,4 +1,4 @@
-# Citation-Phoenix (Zotero 8, 9, 10) - v0.8.4
+# Citation-Phoenix (Zotero 8, 9, 10) - v0.9.2
 
 Now multi-jurisdictional.
 
@@ -125,18 +125,68 @@ These persisted overrides are exposed through `Zotero.CitationPhoenixBridge` and
 
 ### Live Zotero schema UI audit
 
-After installing the newly built XPI and restarting Zotero, open **Tools >
-Developer > Run JavaScript** and run the complete contents of
-`scripts/test-zotero-schema-ui.js` with **Run as async function** enabled. The
-audit creates a temporary item for every item type in `content/schema.json`,
-selects it, inspects the live InfoBox DOM, and checks field presence and
-relative order against the schema. Temporary items are deleted when the audit
-finishes. A completion dialog reports the totals, the detailed JSON report is
-returned in the result pane, and it is also copied to the clipboard.
+Use `scripts/test-zotero-schema-ui.js` to compare the real Zotero InfoBox DOM
+with `content/schema.json`. This is an in-Zotero integration test, not a Node
+script.
 
-For visual review, edit the options at the top of the script. For example,
-use `itemTypes: ['case']`, `pauseMs: 3000`, and `keepItems: true` to leave a
-single generated item visible and inspect it manually.
+1. Build the extension with `./package-xpi.ps1`.
+2. Install the resulting XPI in Zotero and restart Zotero.
+3. Open the library view and make sure the item pane and its Info section are
+   visible.
+4. Open **Tools > Developer > Run JavaScript**.
+5. Paste the complete contents of `scripts/test-zotero-schema-ui.js` into the
+   code box.
+6. Enable **Run as async function**. The script begins with `return await` and
+   will not produce a usable result in regular synchronous mode.
+7. Click **Run** and wait for the completion dialog.
+
+By default, the audit creates a temporary item in My Library for every schema
+item type, selects each item, waits for Citation Phoenix to render it, and
+examines the visible InfoBox rows. The temporary items are deleted as the test
+progresses, and the item that was selected before the test is restored at the
+end.
+
+The audit checks:
+
+- Field presence against the union of `SEQUENCE`, `FIELDS`, and `DATES` for the
+  effective item type.
+- Relative ordering for fields listed in `SEQUENCE`. Fields declared only in
+  `FIELDS` or `DATES` are allowed but do not have an asserted position.
+- Unexpected and duplicate visible fields.
+- Both native Zotero item types and Citation Phoenix custom item types.
+
+`abstractNote` is intentionally excluded because it is not rendered as an
+InfoBox field in the tested UI. Zotero system rows such as item type, date
+added, and date modified, along with creator rows, are also ignored.
+
+When the audit finishes, a dialog shows the pass/fail totals. The complete JSON
+report is displayed in the Run JavaScript result pane and copied to the
+clipboard. Each failed result includes `missing`, `unexpected`, `duplicates`,
+`orderMismatches`, and a snapshot of the observed DOM rows.
+
+The options near the top of the script control the run:
+
+```javascript
+const options = {
+  itemTypes: null,       // null tests all types; ['case', 'book'] tests selected types
+  pauseMs: 100,          // delay after each render; increase for visual review
+  renderTimeoutMs: 5000, // maximum wait for each InfoBox render
+  keepItems: false,      // true leaves generated items in My Library
+  stopOnFailure: false,  // true stops after the first failed item type
+};
+```
+
+For a manual inspection of one item type, use settings such as:
+
+```javascript
+itemTypes: ['case'],
+pauseMs: 3000,
+keepItems: true,
+stopOnFailure: true,
+```
+
+Delete retained audit items manually after inspection. Their titles begin with
+`[Citation Phoenix UI audit`.
 
 ### Prerequisite
 
