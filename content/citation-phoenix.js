@@ -793,7 +793,7 @@ ${mlzBlock}` : mlzBlock;
       this._mapDatasetsByRoot = this._groupDatasetsByRoot(this._mapDatasets);
       this._defaultMapDataset = this._mapDatasets.has("juris-us-map") ? "juris-us-map" : Array.from(this._mapDatasets.keys())[0] || null;
       this._jurisUSMap = this._defaultMapDataset ? this._mapDatasets.get(this._defaultMapDataset)?.data || null : null;
-      const secondaryFiles = fileNames.filter((file) => /^secondary-.*\.json$/i.test(file));
+      const secondaryFiles = fileNames.filter((file) => /^(?:secondary|casetitle)-.*\.json$/i.test(file));
       this._secondaryDatasetMeta = new Map(
         secondaryFiles.map((file) => {
           const dataset = this._datasetNameFromFilename(file);
@@ -950,7 +950,7 @@ ${mlzBlock}` : mlzBlock;
       return String(fileName || "").trim().replace(/\.json$/i, "");
     }
     _datasetBodyFromFilename(fileName) {
-      return this._datasetNameFromFilename(fileName).replace(/^auto-/i, "").replace(/^primary-/i, "").replace(/^secondary-/i, "").replace(/^juris-/i, "").replace(/-map$/i, "");
+      return this._datasetNameFromFilename(fileName).replace(/^auto-/i, "").replace(/^primary-/i, "").replace(/^secondary-/i, "").replace(/^casetitle-/i, "").replace(/^juris-/i, "").replace(/-map$/i, "");
     }
     _jurisdictionRootFromFilename(fileName) {
       const body = this._datasetBodyFromFilename(fileName);
@@ -1417,6 +1417,11 @@ ${mlzBlock}` : mlzBlock;
         if (bestMatch) {
           output.push(bestMatch.value);
           index = bestMatch.endIndex + 1;
+          const plainReplacement = bestMatch.value.replace(/<[^>]*>/g, "");
+          if (plainReplacement.endsWith(".") && segments[index]?.type === "sep" && segments[index].text.startsWith(".")) {
+            output.push(segments[index].text.slice(1));
+            index += 1;
+          }
           continue;
         }
         output.push(this._abbreviateCoreWord(segment.text, jur, categories));
@@ -2289,6 +2294,8 @@ ${mlzBlock}` : mlzBlock;
       this._journalAbbrByContainerTitleKey = /* @__PURE__ */ new Map();
       this._containerTitleShortByKey = /* @__PURE__ */ new Map();
       this._containerTitleContextByKey = /* @__PURE__ */ new Map();
+      this._titleContextByKey = /* @__PURE__ */ new Map();
+      this._activeStyleID = "";
     }
     patch() {
       this._registerSchemaInfoRows();
@@ -2318,6 +2325,7 @@ ${mlzBlock}` : mlzBlock;
       this._journalAbbrByContainerTitleKey.clear();
       this._containerTitleShortByKey.clear();
       this._containerTitleContextByKey.clear();
+      this._titleContextByKey.clear();
       const sysProto = Zotero?.Cite?.System?.prototype;
       if (sysProto) {
         if (this._orig.retrieveItem) sysProto.retrieveItem = this._orig.retrieveItem;
@@ -5565,18 +5573,19 @@ ${mlzBlock}` : mlzBlock;
       const self = this;
       sysProto.retrieveItem = function(id) {
         const cslItem = self._orig.retrieveItem.call(this, id);
+        const styleID = String(this?.__citationPhoenixStyleID || self._activeStyleID || "");
         if (cslItem && typeof cslItem.then === "function") {
-          return cslItem.then((item) => self._decorateCSLItem(item, id));
+          return cslItem.then((item) => self._decorateCSLItem(item, id, styleID));
         }
-        return self._decorateCSLItem(cslItem, id);
+        return self._decorateCSLItem(cslItem, id, styleID);
       };
     }
-    _decorateCSLItem(cslItem, id) {
+    _decorateCSLItem(cslItem, id, styleID = "") {
       if (Array.isArray(cslItem)) {
         if (Array.isArray(id)) {
-          return cslItem.map((item, idx) => this._decorateCSLItem(item, id[idx]));
+          return cslItem.map((item, idx) => this._decorateCSLItem(item, id[idx], styleID));
         }
-        return cslItem.map((item) => this._decorateCSLItem(item, id));
+        return cslItem.map((item) => this._decorateCSLItem(item, id, styleID));
       }
       if (!cslItem || typeof cslItem !== "object") {
         try {
@@ -5597,7 +5606,7 @@ ${mlzBlock}` : mlzBlock;
           const jur = this.Jurisdiction.fromItem(zotItem);
           cslItem.jurisdiction = jur;
           cslItem.country = jur.split(":")[0];
-          this._decorateShortForms(cslItem, jur);
+          this._decorateShortForms(cslItem, jur, styleID);
           this._sanitizeCSLControlFields(cslItem);
           this._logCitationItemData(cslItem, zotItem, "retrieveItem");
           this._logRenderProbeFromItem(cslItem, jur, "retrieveItem");
@@ -5846,6 +5855,32 @@ ${mlzBlock}` : mlzBlock;
       const key = String(styleID || "").trim().toLowerCase();
       return key === "http://juris-m.github.io/styles/jm-indigobook" || key === "http://juris-m.github.io/styles/jm-indigobook-law-review";
     }
+    _patchIndigoBookCaseTitleFormatting(styleXML, styleID = "") {
+      if (!this._styleAllowsContainerTitleFallback(styleID)) return styleXML;
+      return String(styleXML || "").replace(
+        /<text macro="(juris-title(?:-short)?)" font-style="italic"\/>/g,
+        '<choose><if type="legal_case"><text macro="$1"/></if><else><text macro="$1" font-style="italic"/></else></choose>'
+      );
+    }
+    _rememberTitleContext(cslItem) {
+      const title = String(cslItem?.title || "").trim();
+      const key = this.abbrevService.normalizeKey(title);
+      if (!key) return;
+      const prior = this._titleContextByKey.get(key) || { legalCase: false };
+      if (String(cslItem?.type || "").trim() === "legal_case") {
+        prior.legalCase = true;
+      }
+      this._titleContextByKey.set(key, prior);
+    }
+    _shouldAllowTitleFallback(title, styleID = "", jurisdiction = "") {
+      if (!this._styleAllowsContainerTitleFallback(styleID)) return false;
+      const requestedJur = String(jurisdiction || "").trim().toLowerCase();
+      const jur = !requestedJur || requestedJur === "default" ? String(this.abbrevService?._defaultJurisdiction || "us").trim().toLowerCase() : requestedJur;
+      if (jur !== "us" && !jur.startsWith("us:")) return false;
+      const key = this.abbrevService.normalizeKey(title || "");
+      if (!key) return false;
+      return !!this._titleContextByKey.get(key)?.legalCase;
+    }
     _isEnglishLanguage(language) {
       const value = String(language || "").trim().toLowerCase();
       return value === "en" || value.startsWith("en-") || value.startsWith("eng");
@@ -5858,7 +5893,7 @@ ${mlzBlock}` : mlzBlock;
     _escapeNoCaseText(value) {
       return String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     }
-    _decorateShortForms(cslItem, jur) {
+    _decorateShortForms(cslItem, jur, styleID = "") {
       try {
         if (!cslItem["container-title-short"] && cslItem["container-title"]) {
           const hit = this.abbrevService.lookupForCiteProc("container-title", cslItem["container-title"], jur, { noHints: true });
@@ -5869,7 +5904,23 @@ ${mlzBlock}` : mlzBlock;
             this._logShortForm("container-title", cslItem["container-title"], null, "miss");
           }
         }
-        if (!cslItem["title-short"] && cslItem.title) {
+        this._rememberTitleContext(cslItem);
+        const allowTitleFallback = this._shouldAllowTitleFallback(cslItem.title, styleID, jur);
+        if (allowTitleFallback && cslItem.title) {
+          const hit = this.abbrevService.lookupForCiteProc("title", cslItem.title, jur, {
+            noHints: false
+          });
+          if (hit?.value) {
+            const abbreviatedTitle = this.abbrevService.parseDirective(hit.value).value;
+            if (!String(cslItem["title-short"] || "").trim()) {
+              cslItem["title-short"] = abbreviatedTitle;
+            }
+            cslItem.title = abbreviatedTitle;
+            this._logShortForm("title", cslItem.title, cslItem["title-short"], "full-title-hit");
+          } else {
+            this._logShortForm("title", cslItem.title, null, "full-title-miss");
+          }
+        } else if (!cslItem["title-short"] && cslItem.title) {
           const hit = this.abbrevService.lookupForCiteProc("title", cslItem.title, jur, { noHints: true });
           if (hit?.value) {
             cslItem["title-short"] = this._protectAbbreviationValue(this.abbrevService.parseDirective(hit.value).value);
@@ -5996,7 +6047,7 @@ ${mlzBlock}` : mlzBlock;
               return jur;
             }
           }
-          const lookupNoHints = category === "title" ? true : category === "container-title" ? !self._shouldAllowContainerTitleFallback(key, styleID) : noHints;
+          const lookupNoHints = category === "title" ? !self._shouldAllowTitleFallback(key, styleID, jur) : category === "container-title" ? !self._shouldAllowContainerTitleFallback(key, styleID) : noHints;
           const hit = self.abbrevService.lookupForCiteProc(category, key, jur, { noHints: lookupNoHints });
           if (hit?.value) {
             const targetJur = hit.jurisdiction || jur || "default";
@@ -6085,9 +6136,16 @@ ${mlzBlock}` : mlzBlock;
       const self = this;
       proto.getCiteProc = function(...args) {
         const styleXML = self._getStyleXMLSync(this);
+        const styleID = self._getStyleID(this, styleXML);
         if (!styleXML) {
-          const citeproc = self._orig.getCiteProc.apply(this, args);
-          return self._instrumentCiteProcEngine(citeproc);
+          const priorStyleID2 = self._activeStyleID;
+          self._activeStyleID = styleID;
+          try {
+            const citeproc = self._orig.getCiteProc.apply(this, args);
+            return self._instrumentCiteProcEngine(citeproc, styleID);
+          } finally {
+            self._activeStyleID = priorStyleID2;
+          }
         }
         let effectiveXML = styleXML;
         const hasIndigoPref = effectiveXML.includes('jurisdiction-preference="IndigoTemp"');
@@ -6103,17 +6161,27 @@ ${mlzBlock}` : mlzBlock;
           }
         }
         let patched = effectiveXML.replace(/\[HINT:[^\]]+\]/g, "");
+        patched = self._patchIndigoBookCaseTitleFormatting(patched, styleID);
         const restore = self._tempSetXML(this, patched);
+        const priorStyleID = self._activeStyleID;
+        self._activeStyleID = styleID;
         try {
           const citeproc = self._orig.getCiteProc.apply(this, args);
-          return self._instrumentCiteProcEngine(citeproc);
+          return self._instrumentCiteProcEngine(citeproc, styleID);
         } finally {
+          self._activeStyleID = priorStyleID;
           restore();
         }
       };
     }
-    _instrumentCiteProcEngine(citeproc) {
+    _instrumentCiteProcEngine(citeproc, styleID = "") {
       if (!citeproc || typeof citeproc !== "object") return citeproc;
+      try {
+        if (citeproc.sys && typeof citeproc.sys === "object") {
+          citeproc.sys.__citationPhoenixStyleID = String(styleID || "");
+        }
+      } catch (e) {
+      }
       if (citeproc.__indigoRenderProbeInstrumented) return citeproc;
       citeproc.__indigoRenderProbeInstrumented = true;
       this._logCiteprocEngineDetails(citeproc);
@@ -6442,6 +6510,11 @@ ${mlzBlock}` : mlzBlock;
         }
       }
       return null;
+    }
+    _getStyleID(styleObj, styleXML = "") {
+      const xmlMatch = /<id>\s*([^<]+?)\s*<\/id>/i.exec(String(styleXML || ""));
+      if (xmlMatch?.[1]) return xmlMatch[1].trim();
+      return String(styleObj?.styleID || styleObj?.id || "").trim();
     }
     _warnNoSyncStyleRead(reason) {
       if (this._didWarnNoSyncStyleRead) return;

@@ -79,6 +79,28 @@ function Ensure-Directory {
     }
 }
 
+function Get-SHA256Hash {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    $stream = [System.IO.File]::OpenRead($Path)
+    try {
+        $sha256 = [System.Security.Cryptography.SHA256]::Create()
+        try {
+            $bytes = $sha256.ComputeHash($stream)
+            return ([System.BitConverter]::ToString($bytes)).Replace('-', '')
+        }
+        finally {
+            $sha256.Dispose()
+        }
+    }
+    finally {
+        $stream.Dispose()
+    }
+}
+
 function Ensure-GitCheckout {
     param(
         [string]$RepoUrl,
@@ -233,8 +255,8 @@ function Sync-ManagedFiles {
             continue
         }
 
-        $sourceHash = (Get-FileHash -LiteralPath $fromPath -Algorithm SHA256).Hash
-        $destinationHash = (Get-FileHash -LiteralPath $toPath -Algorithm SHA256).Hash
+        $sourceHash = Get-SHA256Hash -Path $fromPath
+        $destinationHash = Get-SHA256Hash -Path $toPath
         if ($sourceHash -eq $destinationHash) {
             Write-Host "Unchanged $Label/$relative" -ForegroundColor DarkGray
             continue

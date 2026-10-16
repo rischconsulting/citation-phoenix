@@ -6,6 +6,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const abbrevServiceURL = pathToFileURL(path.join(rootDir, 'lib', 'services', 'abbrevService.mjs')).href;
 const { AbbrevService } = await import(abbrevServiceURL);
+const patcherURL = pathToFileURL(path.join(rootDir, 'lib', 'services', 'patcher.mjs')).href;
+const { Patcher } = await import(patcherURL);
 
 globalThis.Zotero = {
   Prefs: {
@@ -43,6 +45,188 @@ const service = new AbbrevService({
 });
 
 await service.preload();
+
+let failures = 0;
+
+try {
+  assert.equal(
+    service.abbreviateTitleFallback('American Broadcasting Company', 'us'),
+    'Am. Broad. Co.',
+  );
+  console.log('PASS IndigoBook case-title words abbreviate from the title bucket');
+} catch (error) {
+  failures += 1;
+  console.error(`FAIL IndigoBook case-title word abbreviations: ${String(error?.message || error)}`);
+}
+
+for (const proceduralCase of [
+  ['In re American Broadcasting Company', '<i>in re</i> Am. Broad. Co.'],
+  ['Ex rel. Academy', '<i>ex rel</i>. Acad.'],
+  ['Ex rel., Academy', '<i>ex rel</i>., Acad.'],
+  ['State on the relation of Academy', 'St. <i>ex rel</i>. Acad.'],
+  ['On behalf of Academy', '<i>ex rel</i>. Acad.'],
+  ['In the matter of Academy', '<i>in re</i> Acad.'],
+  ['Petition of Academy', '<i>in re</i> Acad.'],
+  ['Application of Academy', '<i>in re</i> Acad.'],
+]) {
+  try {
+    assert.equal(service.abbreviateTitleFallback(proceduralCase[0], 'us'), proceduralCase[1]);
+    console.log(`PASS IndigoBook procedural phrase: ${proceduralCase[0]}`);
+  } catch (error) {
+    failures += 1;
+    console.error(`FAIL IndigoBook procedural phrase ${proceduralCase[0]}: ${String(error?.message || error)}`);
+  }
+}
+
+const patcher = new Patcher({ abbrevService: service });
+
+const indigoStyleProbe = '<choose><if type="hearing legal_case"><text macro="juris-title" font-style="italic"/></if><else><text macro="juris-title-short" font-style="italic"/></else></choose>';
+try {
+  const patchedStyleProbe = patcher._patchIndigoBookCaseTitleFormatting(
+    indigoStyleProbe,
+    'http://juris-m.github.io/styles/jm-indigobook',
+  );
+  assert.match(patchedStyleProbe, /<if type="legal_case"><text macro="juris-title"\/>/);
+  assert.match(patchedStyleProbe, /<if type="legal_case"><text macro="juris-title-short"\/>/);
+  assert.equal(
+    patcher._patchIndigoBookCaseTitleFormatting(indigoStyleProbe, 'http://juris-m.github.io/styles/jm-alwd-wu'),
+    indigoStyleProbe,
+  );
+  console.log('PASS IndigoBook style keeps case titles roman while retaining other title italics');
+} catch (error) {
+  failures += 1;
+  console.error(`FAIL IndigoBook case-title style formatting: ${String(error?.message || error)}`);
+}
+
+patcher._rememberTitleContext({ type: 'legal_case', title: 'American Broadcasting Company' });
+
+for (const titleFallbackCase of [
+  {
+    style: 'http://juris-m.github.io/styles/jm-indigobook',
+    jurisdiction: 'us:pa',
+    expected: true,
+    label: 'IndigoBook permits US legal-case title fallback',
+  },
+  {
+    style: 'http://juris-m.github.io/styles/jm-indigobook-law-review',
+    jurisdiction: 'us',
+    expected: true,
+    label: 'IndigoBook law-review permits US legal-case title fallback',
+  },
+  {
+    style: 'http://juris-m.github.io/styles/jm-alwd-wu',
+    jurisdiction: 'us',
+    expected: false,
+    label: 'Non-IndigoBook styles reject case-title fallback',
+  },
+  {
+    style: 'http://juris-m.github.io/styles/jm-indigobook',
+    jurisdiction: 'ca:on',
+    expected: false,
+    label: 'Non-US cases reject IndigoBook case-title fallback',
+  },
+  {
+    style: 'http://juris-m.github.io/styles/jm-indigobook',
+    jurisdiction: 'default',
+    expected: false,
+    label: 'A non-US default jurisdiction rejects IndigoBook case-title fallback',
+  },
+]) {
+  try {
+    const actual = patcher._shouldAllowTitleFallback(
+      'American Broadcasting Company',
+      titleFallbackCase.style,
+      titleFallbackCase.jurisdiction,
+    );
+    assert.equal(actual, titleFallbackCase.expected);
+    console.log(`PASS ${titleFallbackCase.label}`);
+  } catch (error) {
+    failures += 1;
+    console.error(`FAIL ${titleFallbackCase.label}: ${String(error?.message || error)}`);
+  }
+}
+
+patcher._rememberTitleContext({ type: 'book', title: 'Unabbreviated Ordinary Work' });
+try {
+  assert.equal(
+    patcher._shouldAllowTitleFallback(
+      'Unabbreviated Ordinary Work',
+      'http://juris-m.github.io/styles/jm-indigobook',
+      'us',
+    ),
+    false,
+  );
+  console.log('PASS Ordinary work titles reject IndigoBook case-title fallback');
+} catch (error) {
+  failures += 1;
+  console.error(`FAIL Ordinary work title fallback guard: ${String(error?.message || error)}`);
+}
+
+for (const decorationCase of [
+  {
+    style: 'http://juris-m.github.io/styles/jm-indigobook',
+    expectedTitle: 'Acad.  v. Bros. &  sons',
+    expectedShort: 'Acad.  v. Bros. &  sons',
+    label: 'IndigoBook decorates a full US legal-case title and supplies title-short',
+  },
+  {
+    style: 'http://juris-m.github.io/styles/jm-alwd-wu',
+    expectedTitle: 'academy  v. brothers and  sons',
+    expectedShort: null,
+    label: 'Non-IndigoBook retrieval leaves a US legal-case title unchanged',
+  },
+]) {
+  const item = {
+    type: 'legal_case',
+    title: 'academy  v. brothers and  sons',
+  };
+  patcher._decorateShortForms(item, 'us:c11:al.d', decorationCase.style);
+  try {
+    assert.equal(item.title, decorationCase.expectedTitle);
+    assert.equal(item['title-short'] || null, decorationCase.expectedShort);
+    console.log(`PASS ${decorationCase.label}`);
+  } catch (error) {
+    failures += 1;
+    console.error(`FAIL ${decorationCase.label}: ${String(error?.message || error)}`);
+  }
+}
+
+const proceduralItem = {
+  type: 'legal_case',
+  title: 'application of academy ex rel. brothers',
+};
+patcher._decorateShortForms(
+  proceduralItem,
+  'us',
+  'http://juris-m.github.io/styles/jm-indigobook',
+);
+try {
+  assert.equal(proceduralItem.title, '<i>in re</i> Acad. <i>ex rel</i>. Bros.');
+  assert.equal(proceduralItem['title-short'], proceduralItem.title);
+  console.log('PASS IndigoBook decoration preserves procedural italics in title and generated title-short');
+} catch (error) {
+  failures += 1;
+  console.error(`FAIL IndigoBook procedural title decoration: ${String(error?.message || error)}`);
+}
+
+const caseWithStoredShortTitle = {
+  type: 'legal_case',
+  title: 'academy  v. brothers and  sons',
+  'title-short': 'Academy',
+};
+patcher._decorateShortForms(
+  caseWithStoredShortTitle,
+  'us:c11:al.d',
+  'http://juris-m.github.io/styles/jm-indigobook',
+);
+try {
+  assert.equal(caseWithStoredShortTitle.title, 'Acad.  v. Bros. &  sons');
+  assert.equal(caseWithStoredShortTitle['title-short'], 'Academy');
+  console.log('PASS IndigoBook abbreviates the case title without changing Zotero Short Title');
+} catch (error) {
+  failures += 1;
+  console.error(`FAIL Stored Short Title preservation: ${String(error?.message || error)}`);
+}
 
 const availableDomains = service.getAvailableAbbrevDomains();
 assert.ok(Array.isArray(availableDomains.ca), 'Canada should expose abbreviation domains');
@@ -117,8 +301,6 @@ const optionCases = [
     label: 'Merged court options prefer institution-part when both institution-part and institution-entire exist',
   },
 ];
-
-let failures = 0;
 
 for (const testCase of cases) {
   const actual = service.lookupForCiteProc(testCase.category, testCase.key, testCase.jurisdiction, { noHints: true })?.value || null;
@@ -272,5 +454,5 @@ if (failures) {
   process.exitCode = 1;
   console.error(`\n${failures} abbreviation regression test(s) failed.`);
 } else {
-  console.log(`\nAll ${cases.length + optionCases.length + 8} abbreviation regression tests passed.`);
+  console.log(`\nAll ${cases.length + optionCases.length + 28} abbreviation regression tests passed.`);
 }
