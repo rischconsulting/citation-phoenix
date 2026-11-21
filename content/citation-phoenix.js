@@ -2291,6 +2291,7 @@ ${mlzBlock}` : mlzBlock;
       this._registeredSchemaRowIDs = [];
       this._registeredSchemaRowsByField = /* @__PURE__ */ new Map();
       this._syncInFlight = /* @__PURE__ */ new Set();
+      this._caseReporterValues = /* @__PURE__ */ new Map();
       this._journalAbbrByContainerTitleKey = /* @__PURE__ */ new Map();
       this._containerTitleShortByKey = /* @__PURE__ */ new Map();
       this._containerTitleContextByKey = /* @__PURE__ */ new Map();
@@ -2326,6 +2327,7 @@ ${mlzBlock}` : mlzBlock;
       this._containerTitleShortByKey.clear();
       this._containerTitleContextByKey.clear();
       this._titleContextByKey.clear();
+      this._caseReporterValues.clear();
       const sysProto = Zotero?.Cite?.System?.prototype;
       if (sysProto) {
         if (this._orig.retrieveItem) sysProto.retrieveItem = this._orig.retrieveItem;
@@ -3069,6 +3071,7 @@ ${mlzBlock}` : mlzBlock;
       } finally {
         this._itemObserverID = null;
         this._syncInFlight.clear();
+        this._caseReporterValues.clear();
         if (this._deferredItemSyncTimer) {
           clearTimeout(this._deferredItemSyncTimer);
           this._deferredItemSyncTimer = null;
@@ -3202,12 +3205,17 @@ ${mlzBlock}` : mlzBlock;
       const effectiveCourt = targetCourt || court;
       const effectiveJurisdiction = inferredJurisdiction;
       const canRewriteJurisdiction = !mlzJurisdiction || /^us(?::|$)/.test(mlzJurisdiction);
+      const reporterKey = String(item.id || itemID);
+      const previousReporter = this._caseReporterValues.get(reporterKey);
       if (reporter && reporter !== mlzReporter) {
         nextExtra = this.Jurisdiction.updateMLZExtraField?.(nextExtra, "reporter", reporter) ?? nextExtra;
       }
-      if (!reporter && mlzReporter) {
+      if (!reporter && mlzReporter && previousReporter == null) {
         item.setField("reporter", mlzReporter);
         changed = true;
+      }
+      if (!reporter && mlzReporter && previousReporter != null) {
+        nextExtra = this.Jurisdiction.updateMLZExtraField?.(nextExtra, "reporter", "") ?? nextExtra;
       }
       if (canRewriteJurisdiction && effectiveJurisdiction && effectiveJurisdiction !== mlzJurisdiction) {
         const displayJurisdiction = this.abbrevService.formatJurisdictionDisplay(effectiveJurisdiction);
@@ -3223,6 +3231,9 @@ ${mlzBlock}` : mlzBlock;
       if (nextExtra !== extra) {
         item.setField("extra", nextExtra);
         changed = true;
+      }
+      if (reporter || mlzReporter) {
+        this._caseReporterValues.set(reporterKey, reporter || mlzReporter);
       }
       if (!changed) return false;
       await item.saveTx({ skipDateModifiedUpdate: true });
