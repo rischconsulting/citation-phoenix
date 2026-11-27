@@ -2291,7 +2291,7 @@ ${mlzBlock}` : mlzBlock;
       this._registeredSchemaRowIDs = [];
       this._registeredSchemaRowsByField = /* @__PURE__ */ new Map();
       this._syncInFlight = /* @__PURE__ */ new Set();
-      this._caseReporterValues = /* @__PURE__ */ new Map();
+      this._mlzFieldValues = /* @__PURE__ */ new Map();
       this._journalAbbrByContainerTitleKey = /* @__PURE__ */ new Map();
       this._containerTitleShortByKey = /* @__PURE__ */ new Map();
       this._containerTitleContextByKey = /* @__PURE__ */ new Map();
@@ -2327,7 +2327,7 @@ ${mlzBlock}` : mlzBlock;
       this._containerTitleShortByKey.clear();
       this._containerTitleContextByKey.clear();
       this._titleContextByKey.clear();
-      this._caseReporterValues.clear();
+      this._mlzFieldValues.clear();
       const sysProto = Zotero?.Cite?.System?.prototype;
       if (sysProto) {
         if (this._orig.retrieveItem) sysProto.retrieveItem = this._orig.retrieveItem;
@@ -3071,7 +3071,7 @@ ${mlzBlock}` : mlzBlock;
       } finally {
         this._itemObserverID = null;
         this._syncInFlight.clear();
-        this._caseReporterValues.clear();
+        this._mlzFieldValues.clear();
         if (this._deferredItemSyncTimer) {
           clearTimeout(this._deferredItemSyncTimer);
           this._deferredItemSyncTimer = null;
@@ -3205,16 +3205,16 @@ ${mlzBlock}` : mlzBlock;
       const effectiveCourt = targetCourt || court;
       const effectiveJurisdiction = inferredJurisdiction;
       const canRewriteJurisdiction = !mlzJurisdiction || /^us(?::|$)/.test(mlzJurisdiction);
-      const reporterKey = String(item.id || itemID);
-      const previousReporter = this._caseReporterValues.get(reporterKey);
+      const reporterStateKey = this._getMLZFieldStateKey(item, "reporter");
+      const hasReporterState = this._mlzFieldValues.has(reporterStateKey);
       if (reporter && reporter !== mlzReporter) {
         nextExtra = this.Jurisdiction.updateMLZExtraField?.(nextExtra, "reporter", reporter) ?? nextExtra;
       }
-      if (!reporter && mlzReporter && previousReporter == null) {
+      if (!reporter && mlzReporter && !hasReporterState) {
         item.setField("reporter", mlzReporter);
         changed = true;
       }
-      if (!reporter && mlzReporter && previousReporter != null) {
+      if (!reporter && mlzReporter && hasReporterState) {
         nextExtra = this.Jurisdiction.updateMLZExtraField?.(nextExtra, "reporter", "") ?? nextExtra;
       }
       if (canRewriteJurisdiction && effectiveJurisdiction && effectiveJurisdiction !== mlzJurisdiction) {
@@ -3224,16 +3224,24 @@ ${mlzBlock}` : mlzBlock;
       if (effectiveCourt && effectiveCourt !== mlzCourt) {
         nextExtra = this.Jurisdiction.updateMLZExtraField?.(nextExtra, "court", effectiveCourt) ?? nextExtra;
       }
-      if (!effectiveCourt && mlzCourt) {
+      const courtStateKey = this._getMLZFieldStateKey(item, "court");
+      const hasCourtState = this._mlzFieldValues.has(courtStateKey);
+      if (!effectiveCourt && mlzCourt && !hasCourtState) {
         item.setField("court", mlzCourt);
         changed = true;
+      }
+      if (!effectiveCourt && mlzCourt && hasCourtState) {
+        nextExtra = this.Jurisdiction.updateMLZExtraField?.(nextExtra, "court", "") ?? nextExtra;
       }
       if (nextExtra !== extra) {
         item.setField("extra", nextExtra);
         changed = true;
       }
       if (reporter || mlzReporter) {
-        this._caseReporterValues.set(reporterKey, reporter || mlzReporter);
+        this._mlzFieldValues.set(reporterStateKey, reporter || mlzReporter);
+      }
+      if (effectiveCourt || mlzCourt) {
+        this._mlzFieldValues.set(courtStateKey, effectiveCourt || mlzCourt);
       }
       if (!changed) return false;
       await item.saveTx({ skipDateModifiedUpdate: true });
@@ -3300,6 +3308,8 @@ ${mlzBlock}` : mlzBlock;
         if (itemTypeName === "case" && ["reporter", "court", "jurisdiction"].includes(definition.field)) continue;
         const nativeFieldName = this._resolveNativeFieldName(item.itemTypeID, definition.field, definition.baseField);
         const nativeValue = nativeFieldName ? String(item.getField?.(nativeFieldName) || "").trim() : "";
+        const fieldStateKey = this._getMLZFieldStateKey(item, definition.field);
+        const hasFieldState = this._mlzFieldValues.has(fieldStateKey);
         if (definition.field === "jurisdiction") {
           const normalizedNative = nativeValue ? this._normalizeJurisdictionValue(nativeValue) : "";
           const mlzJurisdiction = this.Jurisdiction.getMLZJurisdiction?.(extra) || "";
@@ -3307,9 +3317,15 @@ ${mlzBlock}` : mlzBlock;
             const displayJurisdiction = this.abbrevService.formatJurisdictionDisplay(normalizedNative);
             nextExtra = this.Jurisdiction.updateMLZJurisdiction?.(nextExtra, normalizedNative, displayJurisdiction) ?? nextExtra;
           }
-          if (nativeFieldName && !normalizedNative && mlzJurisdiction) {
+          if (nativeFieldName && !normalizedNative && mlzJurisdiction && !hasFieldState) {
             item.setField(nativeFieldName, mlzJurisdiction);
             changed = true;
+          }
+          if (nativeFieldName && !normalizedNative && mlzJurisdiction && hasFieldState) {
+            nextExtra = this.Jurisdiction.updateMLZJurisdiction?.(nextExtra, "") ?? nextExtra;
+          }
+          if (normalizedNative || mlzJurisdiction) {
+            this._mlzFieldValues.set(fieldStateKey, normalizedNative || mlzJurisdiction);
           }
           continue;
         }
@@ -3317,9 +3333,15 @@ ${mlzBlock}` : mlzBlock;
         if (nativeFieldName && nativeValue && nativeValue !== mlzValue) {
           nextExtra = this.Jurisdiction.updateMLZExtraField?.(nextExtra, definition.field, nativeValue) ?? nextExtra;
         }
-        if (nativeFieldName && !nativeValue && mlzValue) {
+        if (nativeFieldName && !nativeValue && mlzValue && !hasFieldState) {
           item.setField(nativeFieldName, mlzValue);
           changed = true;
+        }
+        if (nativeFieldName && !nativeValue && mlzValue && hasFieldState) {
+          nextExtra = this.Jurisdiction.updateMLZExtraField?.(nextExtra, definition.field, "") ?? nextExtra;
+        }
+        if (nativeValue || mlzValue) {
+          this._mlzFieldValues.set(fieldStateKey, nativeValue || mlzValue);
         }
       }
       if (nextExtra !== extra) {
@@ -3329,6 +3351,9 @@ ${mlzBlock}` : mlzBlock;
       if (!changed) return false;
       await item.saveTx({ skipDateModifiedUpdate: true });
       return true;
+    }
+    _getMLZFieldStateKey(item, fieldName) {
+      return `${String(item?.id ?? item ?? "")}::${String(fieldName || "").trim()}`;
     }
     _looksLikeCourtKey(value) {
       const normalized = this.abbrevService.normalizeKey(value || "");
